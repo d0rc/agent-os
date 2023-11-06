@@ -8,20 +8,19 @@ import (
 	zlog "github.com/rs/zerolog/log"
 	"io"
 	"net/http"
-	"agency/engine"
 	"time"
 )
 
 type jobQueueTask struct {
-	req *engine.GenerationSettings
-	res chan *engine.Message
+	req *GenerationSettings
+	res chan *Message
 }
 
 var jobsQueueChannel = make(chan *jobQueueTask, 1000)
 var inferenceEnginesDoneChannel = make(chan int, 1000)
 
-func SendCompletionRequest(req *engine.GenerationSettings) chan *engine.Message {
-	outputChannel := make(chan *engine.Message, 1)
+func SendCompletionRequest(req *GenerationSettings) chan *Message {
+	outputChannel := make(chan *Message, 1)
 	jobsQueueChannel <- &jobQueueTask{
 		req: req,
 		res: outputChannel,
@@ -215,8 +214,8 @@ func runRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) error {
 
 	// ok now each choice goes to its caller
 	for idx, job := range batch {
-		job.res <- &engine.Message{
-			Role:    engine.ChatRoleAssistant,
+		job.res <- &Message{
+			Role:    ChatRoleAssistant,
 			Content: parsedResponse.Choices[idx].Text,
 		}
 	}
