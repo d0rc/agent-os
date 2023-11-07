@@ -10,6 +10,9 @@ AgencyOS is not an operating system for computer users, but rather a computation
 ## Notes on special features
 
 - Automatic requests batching already hear, now with latency of 50ms, but we'll make this a tunable;
+- Yes, we have a feature to force almost any model to output JSON, we have a fix for GPT-3.5-turbo even, open up an issue in case you feel you need it;
+- Yes, we have toolset for extracting successful inference paths to facilitate synthetic training dataset creations for specific tasks, in fact the system was build with this option in mind, if you need it - open an issue, we'll try to sort it out ASAP;
+- Yes, there's a remote server orchestration tools, which can be open sourced, we have a toolset for vast.ai, but almost any cloud provider can be integrated and supported with automatic nodes management;
 - Yes, there is a way to automatically discover maximum batch size for given model, but it would require a benchmarking suite start-up mode - quite easy, but not a priority.
 
 ### Coming Soon:
@@ -63,6 +66,40 @@ compute:
 ```
 
 These days you'll have to copy it to `config.yaml` and fill to your best knowledge, later we might have some basic discovery for M1/M2/M3 Macs and GPU workstations.
+
+## Workflows
+
+### Defining agents
+
+#### Simple generating agent
+
+```yaml
+- agent:
+   name: Google search assistant
+   input-sink: google-search-goals-sink
+   prompt-based:
+    prompt: >
+     You are AI, your goal is to generate as many as possible google search keywords in order to get more understanding in the field of original goal: 
+     
+     Original goal from team member: Hey, we need a help finding top plastic surgeons for nasal septum perforation closure in Italy, Milan, can you help us generating keywords?
+
+     First decide in which language to produce keywords in, and stick forever to that decision, this will make your results reliable. 
+
+     Before generation, think about nuances, such as in what language or set of languages to search for, what team could be missing in their request, but what it would be definitely interested in to achieve their goal. Don't worry, take a deep breath and think step by step.
+
+    response-format:
+     thoughts: place your thoughts here
+     criticism: constructive self-criticism
+     language: thoughts on languages to produce keywords in
+     keywords:
+     - keywords in the language you've choosen
+    life-cycle-type: single-shot
+    life-cycle-length: 200
+```
+
+It's the most basic agent, with life cycle of `single-shot`, which means it runs and runs until it reaches desired number of successful runs. Success here means AgencyOS was able to parse its output.
+
+Output format for an agent 
 
 ## Contributing
 
