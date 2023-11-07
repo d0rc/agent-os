@@ -91,7 +91,7 @@ These days you'll have to copy it to `config.yaml` and fill to your best knowled
     prompt: >
      You are AI, your goal is to generate as many as possible google search keywords in order to get more understanding in the field of original goal: 
      
-     Original goal from team member: Hey, we need a help finding top plastic surgeons for nasal septum perforation closure in Italy, Milan, can you help us generating keywords?
+     Original goal from team member: {{goal}}?
 
      First decide in which language to produce keywords in, and stick forever to that decision, this will make your results reliable. 
 
