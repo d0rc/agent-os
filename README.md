@@ -11,8 +11,8 @@ AgencyOS is not an operating system for computer users, but rather a computation
 
 - Automatic requests batching already hear, now with latency of 50ms, but we'll make this a tunable;
 - Yes, we have a feature to force almost any model to output JSON, we have a fix for GPT-3.5-turbo even, open up an issue in case you feel you need it;
-- Yes, we have toolset for extracting successful inference paths to facilitate synthetic training dataset creations for specific tasks, in fact the system was build with this option in mind, if you need it - open an issue, we'll try to sort it out ASAP;
-- Yes, there's a remote server orchestration tools, which can be open sourced, we have a toolset for vast.ai, but almost any cloud provider can be integrated and supported with automatic nodes management;
+- Yes, we have a toolset for extracting successful inference paths (to facilitate **synthetic training dataset** creations for specific tasks, in fact the system was build with this option in mind), if you need it - open an issue, we'll try to sort it out ASAP;
+- Yes, there're remote server orchestration tools, which can be open sourced, we have a toolset for `vast.ai`, but almost any cloud provider can be integrated and supported with automatic nodes management;
 - Yes, there is a way to automatically discover maximum batch size for given model, but it would require a benchmarking suite start-up mode - quite easy, but not a priority.
 
 ### Coming Soon
