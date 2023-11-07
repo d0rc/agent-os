@@ -1,13 +1,13 @@
 -- name: ddl-create-page-cache
 CREATE TABLE if not exists `page_cache` (
-      `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-      `url` varchar(768) NOT NULL,
-      `raw_content` mediumblob NOT NULL,
-      `created_at` datetime NOT NULL,
-      `cache_hits` int unsigned NOT NULL,
-      `status_code` int unsigned NOT NULL,
-      PRIMARY KEY (`id`),
-      KEY `url` (`url`)
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `url` varchar(768) NOT NULL,
+    `raw_content` mediumblob NOT NULL,
+    `created_at` datetime NOT NULL,
+    `cache_hits` int unsigned NOT NULL,
+    `status_code` int unsigned NOT NULL,
+    PRIMARY KEY (`id`),
+    KEY `url` (`url`)
 ) ROW_FORMAT=COMPRESSED;
 
 -- name: query-page-cache
@@ -21,16 +21,15 @@ update page_cache set cache_hits = cache_hits + 1 where id = ?;
 
 -- name: ddl-create-search-cache
 create table if not exists search_cache (
-    id bigint unsigned not null auto_increment,
-    keywords varchar(1024),
-    lang varchar(32),
-    country varchar(32),
-    location varchar(255),
-    raw_content mediumblob not null,
-    created_at datetime not null,
-    cache_hits int unsigned not null,
-    key idx_search_cache_keywords (keywords, lang, country, location),
-    primary key (id));
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `keywords` varchar(1024) DEFAULT NULL,
+    `lang` varchar(32) DEFAULT NULL,
+    `country` varchar(32) DEFAULT NULL,
+    `location` varchar(255) DEFAULT NULL,
+    `raw_content` mediumblob NOT NULL,
+    `created_at` datetime NOT NULL,
+    `cache_hits` int unsigned NOT NULL,
+    PRIMARY KEY (`id`));
 
 -- name: query-search-by-keywords
 select id, keywords, lang, country, location, raw_content, created_at, cache_hits from search_cache where keywords =? and lang =? and country =? and location =?;
@@ -51,15 +50,16 @@ update search_cache set cache_hits = cache_hits + 1 where id = ?;
 
 -- name: ddl-create-llm-cache
 create table if not exists llm_cache (
-    id bigint unsigned not null  auto_increment,
-    model varchar(1024),
-    prompt mediumblob not null,
-    prompt_length int unsigned not null,
-    created_at datetime not null,
-    generation_settings varchar(1024),
-    cache_hits int unsigned not null,
-    generation_result mediumblob not null,
-    primary key (id));
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `model` varchar(1024) DEFAULT NULL,
+    `prompt` mediumblob NOT NULL,
+    `prompt_length` int unsigned NOT NULL,
+    `created_at` datetime NOT NULL,
+    `generation_settings` varchar(1024) DEFAULT NULL,
+    `cache_hits` int unsigned NOT NULL,
+    `generation_result` mediumblob NOT NULL,
+    PRIMARY KEY (`id`),
+    KEY `prompt_length` (`prompt_length`,`prompt`(900)));
 
 -- name: insert-llm-cache-record
 insert into llm_cache (model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result)
@@ -86,14 +86,14 @@ update llm_cache set cache_hits = cache_hits + 1 where id = ?;
 
 -- name: ddl-task-cache
 create table if not exists compute_cache (
-    id bigint unsigned not null auto_increment,
-    namespace varchar(255),
-    task_hash varchar(255),
-    task_result longblob not null,
-    unique(namespace, task_hash),
-    primary key(id),
-    cache_hits int unsigned not null default 0,
-    created_at timestamp not null default current_timestamp
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `namespace` varchar(255) DEFAULT NULL,
+    `task_hash` varchar(255) DEFAULT NULL,
+    `task_result` longblob NOT NULL,
+    `cache_hits` int unsigned NOT NULL DEFAULT '0',
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `namespace` (`namespace`,`task_hash`)
 ) ROW_FORMAT=COMPRESSED;
 
 -- name: mark-task-cache-hit
