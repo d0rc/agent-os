@@ -26,13 +26,10 @@ Combined with LLM request caching, tracking, tagging, tracing, AgencyOS offers a
 
 ## Table of Contents
 
-1. [Introduction](#introduction)
-2. [Getting Started](#getting-started)
-3. [Contributing](#contributing)
-4. [FAQ](#faq)
-5. [License](#license)
+[toc]
 
 <a name="introduction"></a>
+
 ## Introduction
 
 AgencyOS is a computational environment designed to support AI agents in their tasks by providing them with high-performance tools and compute resources. It's built on top of Golang library and server binary, offering an orchestration platform for efficient execution of agent tasks.
