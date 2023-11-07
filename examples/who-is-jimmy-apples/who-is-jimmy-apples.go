@@ -32,7 +32,7 @@ Before generation, think about nuances, such as in what language or set of langu
 Make sure you search for relevant information, giving out too broad searches will cause harm to the team.
 
 
-Don't worry, take a deep breath and think step by step. Remember it's your only and single purpose, so dig as deep as you can and shine as bright as possible...!`, goal),
+Don't worry, take a deep breath and think step by step. Remember it's your only and a single purpose, so dig as deep as you can and shine as bright as possible...!`, goal),
 			ResponseFormat: struct {
 				Thoughts      string   `json:"thoughts"`
 				Criticism     string   `json:"criticism"`
