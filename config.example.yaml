@@ -1,0 +1,15 @@
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+
+tools:
+  serp-api:
+    token: ${SERP_API_TOKEN}
+  proxy-crawl:
+    token: ${PROXY_CRAWL_TOKEN}
+
+compute:
+  - endpoint: http://localhost:8001/v1/completions
+    type: http-openai
+    max-batch-size: 128 # in case of Mistral-7B and A6000 GPU, 48G
