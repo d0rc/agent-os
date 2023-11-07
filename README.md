@@ -91,7 +91,7 @@ These days you'll have to copy it to `config.yaml` and fill to your best knowled
     prompt: >
      You are AI, your goal is to generate as many as possible google search keywords in order to get more understanding in the field of original goal: 
      
-     Original goal from team member: {{goal}}?
+     Original goal from a team member: {{goal}}?
 
      First decide in which language to produce keywords in, and stick forever to that decision, this will make your results reliable. 
 
@@ -102,7 +102,7 @@ These days you'll have to copy it to `config.yaml` and fill to your best knowled
      criticism: constructive self-criticism
      language: thoughts on languages to produce keywords in
      keywords:
-     - keywords in the language you've choosen
+     - keywords in the language you've chosen
     life-cycle-type: single-shot
     life-cycle-length: 200
 ```
