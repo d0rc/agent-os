@@ -24,9 +24,23 @@ AgencyOS is not an operating system for computer users, but rather a computation
 
 Combined with LLM request caching, tracking, tagging, tracing, AgencyOS offers a powerful computational environment for AI agents.
 
-## Table of Contents
-
-[toc]
+# Table of Contents
+- [AgencyOS: A Computational Environment for AI Agents](#agencyos-a-computational-environment-for-ai-agents)
+  - [Features](#features)
+  - [Notes on special features](#notes-on-special-features)
+    - [Coming Soon:](#coming-soon)
+  - [Introduction](#introduction)
+  - [Getting Started](#getting-started)
+  - [Configuration file](#configuration-file)
+  - [Workflows](#workflows)
+    - [Defining agents](#defining-agents)
+      - [Simple generating agent](#simple-generating-agent)
+  - [Contributing](#contributing)
+  - [FAQ](#faq)
+    - [How does AgencyOS differ from traditional operating systems?](#how-does-agencyos-differ-from-traditional-operating-systems)
+    - [What are the benefits of using AgencyOS?](#what-are-the-benefits-of-using-agencyos)
+    - [How can I stay updated on AgencyOS developments?](#how-can-i-stay-updated-on-agencyos-developments)
+  - [License](#license)
 
 <a name="introduction"></a>
 
