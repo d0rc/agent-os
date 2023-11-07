@@ -133,9 +133,10 @@ AgencyOS is not an operating system for computer users but rather a computationa
 
 AgencyOS offers several benefits, including:
 
-- High-performance multi-agent execution environment for mixed compute
-- A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops
-- Compatibility with various compute resources (cloud GPUs, local GPUs, remote hardware)
+- High-performance multi-agent execution environment for mixed compute;
+- A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops;
+- Compatibility with various compute resources (cloud GPUs, local GPUs, remote hardware);
+- Local inference load balancer with caching, tooling and data lake APIs for LLMs research.
 
 ### How can I stay updated on AgencyOS developments?
 
