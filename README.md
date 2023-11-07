@@ -99,7 +99,9 @@ These days you'll have to copy it to `config.yaml` and fill to your best knowled
 
 It's the most basic agent, with life cycle of `single-shot`, which means it runs and runs until it reaches desired number of successful runs. Success here means AgencyOS was able to parse its output.
 
-Output format for an agent 
+Output format for an agent is given by a structure defined in `response-format`, and whatever agent will respond will be accepted as successful only if it was in desired format and we have a special tool to address common JSON issues, including an option to employ the model itself, or a different model to attempt to fix JSON in case Turing Machine style fixes didn't help, behold:
+
+https://github.com/d0rc/agent-os/blob/main/tools/json-parser.go#L10
 
 ## Contributing
 
