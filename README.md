@@ -7,6 +7,11 @@ AgencyOS is not an operating system for computer users, but rather a computation
 - High-performance multi-agent execution environment for mixed compute
 - A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops
 
+## Notes on special features
+
+- Automatic requests batching already hear, now with latency of 50ms, but we'll make this a tunable;
+- Yes, there is a way to automatically discover maximum batch size for given model, but it would require a benchmarking suite start-up mode - quite easy, but not a priority.
+
 ### Coming Soon:
 
 - Plugins to support automated or user-controlled rent of servers
@@ -35,6 +40,30 @@ AgencyOS is a computational environment designed to support AI agents in their t
 Soon!
 
 <a name="contributing"></a>
+## Configuration file
+
+Example configuration file:
+
+```yaml
+database:
+  type: mysql
+  host: localhost
+  port: 3306
+
+tools:
+  serp-api:
+    token: ${SERP_API_TOKEN}
+  proxy-crawl:
+    token: ${PROXY_CRAWL_TOKEN}
+
+compute:
+  - endpoint: http://localhost:8001/v1/completions
+    type: http-openai
+    max-batch-size: 128 # in case of Mistral-7B and A6000 GPU, 48G
+```
+
+These days you'll have to copy it to `config.yaml` and fill to your best knowledge, later we might have some basic discovery for M1/M2/M3 Macs and GPU workstations.
+
 ## Contributing
 
 We welcome contributions from the community to improve and expand AgencyOS. If you're interested in contributing, please follow these steps:
