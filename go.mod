@@ -15,6 +15,7 @@ require (
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
 	golang.org/x/crypto v0.12.0
 	golang.org/x/term v0.11.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
