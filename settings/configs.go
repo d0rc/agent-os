@@ -23,15 +23,18 @@ type ConfigurationFile struct {
 			Token string `yaml:"token"`
 		} `yaml:"proxy-crawl"`
 	} `yaml:"tools"`
-	VectorDBs []struct {
-		Type     string `yaml:"type"`
-		Endpoint string `yaml:"endpoint"`
-	} `yaml:"vector-dbs"`
-	Compute []struct {
+	VectorDBs []VectorDBConfigurationSection `yaml:"vector-dbs"`
+	Compute   []struct {
 		Endpoint     string `yaml:"endpoint"`
 		Type         string `yaml:"type"`
 		MaxBatchSize int    `yaml:"max-batch-size"`
 	} `yaml:"compute"`
+}
+
+type VectorDBConfigurationSection struct {
+	Type     string `yaml:"type"`
+	Endpoint string `yaml:"endpoint"`
+	APIToken string `yaml:"api-token"`
 }
 
 func ProcessConfigurationFile(path string) (*ConfigurationFile, error) {
