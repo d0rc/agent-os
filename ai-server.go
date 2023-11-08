@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
@@ -27,12 +28,7 @@ var host = flag.String("host", "0.0.0.0", "host to listen at")
 func main() {
 	lg := consoleInit("ai-srv")
 
-	storage, err := cmds.NewStorage(lg)
-	if err != nil {
-		lg.Fatal().Err(err).Msg("failed to create storage")
-	}
-
-	lg.Info().Interface("storage", storage).Msg("started storage")
+	ctx, err := server.NewContext("config.yaml", lg)
 
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -52,7 +48,7 @@ func main() {
 			return
 		}
 
-		resp, err := processRequest(clientRequest, storage)
+		resp, err := processRequest(clientRequest, ctx)
 
 		respBytes, err := json.Marshal(resp)
 		if err != nil {
@@ -143,18 +139,18 @@ func (h LineInfoHook) Run(e *zerolog.Event, l zerolog.Level, msg string) {
 	}
 }
 
-func processRequest(request *cmds.ClientRequest, storage *cmds.Storage) (*cmds.ServerResponse, error) {
+func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.ServerResponse, error) {
 	if request.GetPageRequests != nil {
 		// got some page requests...!
-		return cmds.ProcessPageRequests(request.GetPageRequests, storage)
+		return cmds.ProcessPageRequests(request.GetPageRequests, ctx)
 	}
 
 	if request.GoogleSearchRequests != nil {
-		return cmds.ProcessGoogleSearches(request.GoogleSearchRequests, storage)
+		return cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
 	}
 
 	if request.GetCompletionRequests != nil {
-		return cmds.ProcessGetCompletions(request.GetCompletionRequests, storage)
+		return cmds.ProcessGetCompletions(request.GetCompletionRequests, ctx)
 	}
 
 	return nil, nil

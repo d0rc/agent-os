@@ -2,6 +2,7 @@ package cmds
 
 import (
 	"fmt"
+	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
 	"math/rand"
 	"sync"
@@ -171,7 +172,7 @@ func GetInferenceEngines() []*InferenceEngine {
 	return inferenceEngines
 }
 
-func ProcessGetCompletions(request []GetCompletionRequest, storage *Storage) (response *ServerResponse, err error) {
+func ProcessGetCompletions(request []GetCompletionRequest, ctx *server.Context) (response *ServerResponse, err error) {
 	// I've found no evidence that vllm supports batching for real
 	// so we can just launch parallel processing now
 	// later comment: and it's not the right place to make automatic batching...:)
@@ -179,9 +180,9 @@ func ProcessGetCompletions(request []GetCompletionRequest, storage *Storage) (re
 	for idx, pr := range request {
 		results[idx] = make(chan *GetCompletionResponse, 1)
 		go func(cr GetCompletionRequest, ch chan *GetCompletionResponse) {
-			completionResponse, err := processGetCompletion(cr, storage)
+			completionResponse, err := processGetCompletion(cr, ctx)
 			if err != nil {
-				storage.lg.Error().Err(err).
+				ctx.Log.Error().Err(err).
 					Msgf("Error processing completion request: ```%s```", aurora.Cyan(cr.RawPrompt))
 			}
 
@@ -210,13 +211,13 @@ type CompletionCacheRecord struct {
 	GenerationResult             string    `db:"generation_result"`
 }
 
-func processGetCompletion(cr GetCompletionRequest, storage *Storage) (*GetCompletionResponse, error) {
+func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCompletionResponse, error) {
 	cachedResponse := make([]CompletionCacheRecord, 0, 1)
-	err := storage.db.GetStructsSlice("query-llm-cache", &cachedResponse,
+	err := ctx.Storage.Db.GetStructsSlice("query-llm-cache", &cachedResponse,
 		len(cr.RawPrompt), cr.RawPrompt)
 
 	if err != nil {
-		storage.lg.Error().Err(err).
+		ctx.Log.Error().Err(err).
 			Msgf("Failed to get cached response for prompt %s", cr.RawPrompt)
 		// just continue...
 	}
@@ -229,9 +230,9 @@ func processGetCompletion(cr GetCompletionRequest, storage *Storage) (*GetComple
 		// we have some cache hits, let's check if it's enough...!
 		for _, cacheRecord := range cachedResponse {
 			response.Choices = append(response.Choices, cacheRecord.GenerationResult)
-			_, err := storage.db.Exec("make-llm-cache-hit", cacheRecord.Id)
+			_, err := ctx.Storage.Db.Exec("make-llm-cache-hit", cacheRecord.Id)
 			if err != nil {
-				storage.lg.Error().Err(err).Msgf("error updating cache-hit counter: %v", err)
+				ctx.Log.Error().Err(err).Msgf("error updating cache-hit counter: %v", err)
 			}
 		}
 
@@ -254,7 +255,7 @@ func processGetCompletion(cr GetCompletionRequest, storage *Storage) (*GetComple
 		MaxRetries: 1,
 	})
 
-	_, err = storage.db.Exec("insert-llm-cache-record",
+	_, err = ctx.Storage.Db.Exec("insert-llm-cache-record",
 		cr.Model,
 		cr.RawPrompt,
 		len(cr.RawPrompt),
@@ -263,7 +264,7 @@ func processGetCompletion(cr GetCompletionRequest, storage *Storage) (*GetComple
 		0,
 		message.Content)
 	if err != nil {
-		storage.lg.Error().Err(err).
+		ctx.Log.Error().Err(err).
 			Msgf("error creating new llm cache record: %v", err)
 	}
 

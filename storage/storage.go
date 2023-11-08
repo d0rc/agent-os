@@ -1,4 +1,4 @@
-package cmds
+package storage
 
 import (
 	"crypto/sha512"
@@ -14,7 +14,7 @@ import (
 var queriesFs embed.FS
 
 type Storage struct {
-	db *unidb.UniDB
+	Db *unidb.UniDB
 	lg zerolog.Logger
 }
 
@@ -31,7 +31,7 @@ func NewStorage(lg zerolog.Logger) (*Storage, error) {
 	}
 
 	storage := &Storage{
-		db: db,
+		Db: db,
 		lg: lg,
 	}
 	// execute DDLs
@@ -41,10 +41,10 @@ func NewStorage(lg zerolog.Logger) (*Storage, error) {
 }
 
 func (s *Storage) execDDLs() {
-	for qName := range s.db.GetQueries() {
+	for qName := range s.Db.GetQueries() {
 		if strings.HasPrefix(qName, "ddl-") {
 			s.lg.Info().Str("name", qName).Msg("running DDL")
-			s.db.ShouldExec(qName)
+			s.Db.ShouldExec(qName)
 		}
 	}
 }
@@ -64,13 +64,13 @@ type computeCacheRecord struct {
 
 func (s *Storage) GetTaskCachedResult(namespace, task string) ([]byte, error) {
 	results := make([]computeCacheRecord, 0)
-	err := s.db.GetStructsSlice("get-task-cache-record", &results, namespace, getHash(task))
+	err := s.Db.GetStructsSlice("get-task-cache-record", &results, namespace, getHash(task))
 	if err != nil {
 		return nil, err
 	}
 
 	if len(results) > 0 {
-		_, err = s.db.Exec("mark-task-cache-hit", results[0].Id)
+		_, err = s.Db.Exec("mark-task-cache-hit", results[0].Id)
 		if err != nil {
 			zlog.Error().Err(err).Msgf("error marking task cache hit for id: %d", results[0].Id)
 		}
@@ -81,6 +81,6 @@ func (s *Storage) GetTaskCachedResult(namespace, task string) ([]byte, error) {
 }
 
 func (s *Storage) SaveTaskCacheResult(namespace, task string, result []byte) error {
-	_, err := s.db.Exec("save-task-cache-record", namespace, getHash(task), result)
+	_, err := s.Db.Exec("save-task-cache-record", namespace, getHash(task), result)
 	return err
 }
