@@ -74,7 +74,7 @@ create table  if not exists  embeddings_queues (
 );
 
 -- name: set-embeddings-queue-pointer
-insert into embeddings_queues (queue_name, queue_pointer) on duplicate key update queue_pointer = queue_pointer;
+insert into embeddings_queues (queue_name, queue_pointer) values (?, ?) on duplicate key update queue_pointer = queue_pointer;
 
 -- name: get-embeddings-queue-pointer
 select id, queue_name, queue_pointer from embeddings_queues where queue_name = ?;
@@ -98,6 +98,9 @@ insert into llm_cache (model, prompt, prompt_length, created_at, generation_sett
 
 -- name: query-llm-cache-by-id
 select id, model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result from llm_cache where id = ?;
+
+-- name: query-llm-cache-by-ids-multi
+select id, model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result from llm_cache where id > ? limit ?;
 
 -- name: query-llm-cache
 select id,

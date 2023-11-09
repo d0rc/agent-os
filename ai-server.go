@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	process_embeddings "github.com/d0rc/agent-os/process-embeddings"
 	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
 	"github.com/rs/zerolog"
@@ -33,7 +34,7 @@ func main() {
 
 	engines.StartInferenceEngines()
 	go cmds.ProcessJobsQueue()
-	go ctx.Run()
+	go ctx.Start(process_embeddings.BackgroundEmbeddingsWorker)
 
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

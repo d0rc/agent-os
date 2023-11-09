@@ -29,14 +29,14 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 	}, nil
 }
 
-func (ctx *Context) Run() {
+func (ctx *Context) Start(embeddingsWorker func(ctx *Context)) {
 	if len(ctx.Config.Compute) > 0 {
 
 	} else {
 		ctx.Log.Warn().Msg("no compute section in config")
 	}
 	if len(ctx.Config.VectorDBs) > 0 {
-		go ctx.backgroundEmbeddingsWorker()
+		go embeddingsWorker(ctx)
 	} else {
 		ctx.Log.Warn().Msg("no vectorDBs section in config")
 	}
