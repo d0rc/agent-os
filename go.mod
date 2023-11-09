@@ -11,6 +11,7 @@ require (
 	github.com/henomis/qdrant-go v1.0.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/logrusorgru/aurora v2.0.3+incompatible
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/rs/zerolog v1.31.0
 	github.com/serpapi/google-search-results-golang v0.0.0-20230616000151-95707d993dc6
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
@@ -29,6 +30,7 @@ require (
 	github.com/jdkato/prose/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mingrammer/commonregex v1.0.1 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect

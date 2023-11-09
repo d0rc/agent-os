@@ -49,7 +49,7 @@ values (?,?,?,?,?,?,?);
 update search_cache set cache_hits = cache_hits + 1 where id = ?;
 
 -- name: ddl-create-llm-embeddings
-CREATE TABLE `llm_embeddings` (
+CREATE TABLE  if not exists  `llm_embeddings` (
     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
     `model` varchar(255) DEFAULT NULL,
     `namespace` varchar(255) DEFAULT NULL,
@@ -65,7 +65,7 @@ select id, model, namespace, namespace_id, embedding where id = ?;
 select id, model, text_hash, embedding where text_hash = ?;
 
 -- name: ddl-embeddings-queues
-create table embeddings_queues (
+create table  if not exists  embeddings_queues (
     id bigint unsigned not null auto_increment,
     queue_name varchar(255),
     queue_pointer bigint unsigned,

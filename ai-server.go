@@ -30,6 +30,8 @@ func main() {
 
 	ctx, err := server.NewContext("config.yaml", lg)
 
+	cmds.StartInferenceEngines()
+
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// read the request

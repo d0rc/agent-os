@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/d0rc/agent-os/vectors"
 	"github.com/logrusorgru/aurora"
 	zlog "github.com/rs/zerolog/log"
 	"io"
@@ -12,8 +13,9 @@ import (
 )
 
 type jobQueueTask struct {
-	req *GenerationSettings
-	res chan *Message
+	req           *GenerationSettings
+	res           chan *Message
+	resEmbeddings chan *vectors.Vector
 }
 
 var jobsQueueChannel = make(chan *jobQueueTask, 1000)
@@ -106,7 +108,7 @@ func processJobsQueue() {
 			fmt.Printf("[%s] sending request, batch_size = %d\n",
 				aurora.BrightMagenta("BATCH"),
 				len(batch))
-			err := runRequest(inferenceEngines[bestEngineIdx], batch)
+			_, err := runCompletionRequest(inferenceEngines[bestEngineIdx], batch)
 			if err != nil {
 				// things got wrong....
 				go func(batch []*jobQueueTask) {
@@ -120,9 +122,9 @@ func processJobsQueue() {
 	}
 }
 
-func runRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) error {
+func runCompletionRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) ([]*Message, error) {
 	if len(batch) == 0 {
-		return nil
+		return nil, nil
 	}
 	client := http.Client{
 		Timeout: InferenceTimeout,
@@ -176,13 +178,13 @@ func runRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) error {
 		zlog.Error().Err(err).
 			Interface("batch", batch).
 			Msg("error sending request")
-		return err
+		return nil, err
 	}
 	if resp.StatusCode != 200 {
 		zlog.Error().Err(err).
 			Interface("batch", batch).
 			Msgf("error sending request http code is %d", resp.StatusCode)
-		return err
+		return nil, err
 	}
 	// read resp.Body to result
 	result, err := io.ReadAll(resp.Body)
@@ -190,7 +192,7 @@ func runRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) error {
 		zlog.Error().Err(err).
 			Interface("batch", batch).
 			Msg("error reading response")
-		return err
+		return nil, err
 	}
 
 	// now, let us parse all the response in choices
@@ -210,19 +212,110 @@ func runRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) error {
 		zlog.Error().Err(err).
 			Str("response", string(result)).
 			Msg("error unmarshalling response")
+		return nil, err
 	}
 
+	results := make([]*Message, len(batch))
 	// ok now each choice goes to its caller
 	for idx, job := range batch {
-		job.res <- &Message{
+		results[idx] = &Message{
 			Role:    ChatRoleAssistant,
 			Content: parsedResponse.Choices[idx].Text,
 		}
+		if job.res != nil {
+			job.res <- results[idx]
+		}
 	}
 
-	return nil
+	return results, nil
 }
 
-func init() {
-	go processJobsQueue()
+func runEmbeddingsRequest(inferenceEngine *InferenceEngine, batch []*jobQueueTask) ([]*vectors.Vector, error) {
+	if len(batch) == 0 {
+		return nil, nil
+	}
+	if inferenceEngine.EmbeddingsEndpointUrl == "" {
+		return nil, fmt.Errorf("embeddings endpoint is not configured for inference engine %v", inferenceEngine)
+	}
+	client := http.Client{
+		Timeout: InferenceTimeout,
+	}
+
+	type command struct {
+		Input []string `json:"input"`
+	}
+
+	promptBodies := make([]string, len(batch))
+	for i, b := range batch {
+		promptBodies[i] = b.req.RawPrompt
+	}
+
+	// '{"input":["hello", "hello", "hello", "hello"]}'
+	cmd := &command{
+		Input: promptBodies,
+	}
+
+	commandBuffer, err := json.Marshal(cmd)
+	if err != nil {
+		zlog.Fatal().Err(err).Msg("error marshaling command")
+	}
+
+	// sending the request here...!
+	resp, err := client.Post(inferenceEngine.EmbeddingsEndpointUrl,
+		"application/json",
+		bytes.NewBuffer(commandBuffer))
+
+	// whatever happened here, it's not of our business, we should just log it
+	if err != nil {
+		zlog.Error().Err(err).
+			Interface("batch", batch).
+			Msg("error sending request")
+		return nil, err
+	}
+	if resp.StatusCode != 200 {
+		zlog.Error().Err(err).
+			Interface("batch", batch).
+			Msgf("error sending request http code is %d", resp.StatusCode)
+		return nil, err
+	}
+	// read resp.Body to result
+	result, err := io.ReadAll(resp.Body)
+	if err != nil {
+		zlog.Error().Err(err).
+			Interface("batch", batch).
+			Msg("error reading response")
+		return nil, err
+	}
+
+	type embeddingsResponse struct {
+		Data []struct {
+			Embedding []float64 `json:"embedding"`
+		} `json:"data"`
+		Model string `json:"model"`
+	}
+
+	// now, let us parse all the response
+	parsedResponse := &embeddingsResponse{}
+	err = json.Unmarshal(result, parsedResponse)
+	if err != nil {
+		zlog.Error().Err(err).
+			Str("response", string(result)).
+			Msg("error unmarshalling response")
+
+		return nil, err
+	}
+
+	results := make([]*vectors.Vector, len(batch))
+	// ok now each choice goes to its caller
+	for idx, job := range batch {
+		results[idx] = &vectors.Vector{
+			VecF64: parsedResponse.Data[idx].Embedding,
+			Model:  &parsedResponse.Model,
+		}
+		if job.resEmbeddings != nil {
+			job.resEmbeddings <- results[idx]
+		}
+	}
+
+	return results, nil
 }

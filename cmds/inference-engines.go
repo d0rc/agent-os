@@ -2,6 +2,9 @@ package cmds
 
 import (
 	"fmt"
+	"github.com/logrusorgru/aurora"
+	"github.com/olekukonko/tablewriter"
+	"os"
 	"time"
 )
 
@@ -57,31 +60,34 @@ const A6000vLLMBatchSize = 128
 const InferenceTimeout = 600 * time.Second
 
 type InferenceEngine struct {
-	EndpointUrl     string
-	Protocol        EndpointProtocol
-	MaxBatchSize    int
-	Performance     float32 // tokens per second
-	MaxRequests     int
-	Models          []string // supported models
-	RequestsServed  uint64
-	TimeConsumed    time.Duration
-	TokensProcessed uint64
-	TokensGenerated uint64
-	PromptTokens    uint64
-	LeasedAt        time.Time
-	Busy            bool
+	EndpointUrl           string
+	EmbeddingsEndpointUrl string
+	Protocol              EndpointProtocol
+	MaxBatchSize          int
+	Performance           float32 // tokens per second
+	MaxRequests           int
+	Models                []string // supported models
+	RequestsServed        uint64
+	TimeConsumed          time.Duration
+	TokensProcessed       uint64
+	TokensGenerated       uint64
+	PromptTokens          uint64
+	LeasedAt              time.Time
+	Busy                  bool
+	EmbeddingsDims        *uint64
 }
 
 var inferenceEngines []*InferenceEngine
 
 func init() {
 	localLLM := &InferenceEngine{
-		EndpointUrl:  "http://localhost:8000/v1/completions",
-		Protocol:     EP_OpenAI,
-		MaxBatchSize: 1,
-		Performance:  0,
-		MaxRequests:  1,
-		Models:       []string{""},
+		EndpointUrl:           "http://localhost:8000/v1/completions",
+		EmbeddingsEndpointUrl: "http://127.0.0.1:8000/v1/embeddings",
+		Protocol:              EP_OpenAI,
+		MaxBatchSize:          1,
+		Performance:           0,
+		MaxRequests:           1,
+		Models:                []string{""},
 	}
 
 	remoteVLLM1 := &InferenceEngine{
@@ -120,7 +126,7 @@ func init() {
 
 	fmt.Printf("localLLM: %v\n", localLLM)
 	inferenceEngines = []*InferenceEngine{
-		//localLLM,
+		localLLM,
 		remoteVLLM1,
 		remoteVLLM2,
 		remoteVLLM3,
@@ -128,4 +134,93 @@ func init() {
 	}
 
 	// inferenceEngines = []*InferenceEngine{inferenceEngines[1]}
+}
+
+func StartInferenceEngines() {
+	doneChannel := make(chan struct{}, 1024)
+	for _, engine := range inferenceEngines {
+		startInferenceEngine(engine, doneChannel)
+	}
+
+	for range inferenceEngines {
+		<-doneChannel
+	}
+
+	tw := tablewriter.NewWriter(os.Stdout)
+	tw.SetHeader([]string{"Endpoint", "MaxBatchSize", "MaxRequests", "Models", "Ok", "EmbeddingsDims"})
+	tableData := make([][]string, 0)
+	for _, engine := range inferenceEngines {
+		tableData = append(tableData, []string{
+			engine.EndpointUrl,
+			fmt.Sprintf("%d", engine.MaxBatchSize),
+			fmt.Sprintf("%d", engine.MaxRequests),
+			fmt.Sprintf("%v", takeLastNRunes(engine.Models[0], 75)),
+			fmt.Sprintf("%s", aurora.BrightGreen("YES")),
+			fmt.Sprintf("%v", toUint64(engine.EmbeddingsDims)),
+		})
+	}
+	tw.AppendBulk(tableData)
+	tw.Render()
+
+	go processJobsQueue()
+}
+
+func toUint64(dims *uint64) string {
+	if dims == nil {
+		return "N/A"
+	}
+	return fmt.Sprintf("%d", *dims)
+}
+
+func takeLastNRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}
+
+func startInferenceEngine(engine *InferenceEngine, done chan struct{}) {
+	// we need to send a completion request to the engine
+	// detect the model, then send embeddings request to the engine and
+	// detect the model and dimensions
+	_, err := runCompletionRequest(engine, []*jobQueueTask{
+		{
+			req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+		},
+	})
+	if err != nil {
+		// engine failed to run completion
+	}
+
+	cEmb, err := runEmbeddingsRequest(engine, []*jobQueueTask{
+		{
+			req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+		},
+	})
+
+	if err != nil {
+		// engine failed to run embeddings
+	}
+
+	if len(cEmb) > 0 {
+		if cEmb[0].Model != nil {
+			added := false
+			for idx, model := range engine.Models {
+				if model == *cEmb[0].Model || model == "" {
+					added = true
+					engine.Models[idx] = *cEmb[0].Model
+					break
+				}
+			}
+			if !added {
+				engine.Models = append(engine.Models, *cEmb[0].Model)
+			}
+		}
+		if len(cEmb[0].VecF64) > 0 {
+			dims := uint64(len(cEmb[0].VecF64))
+			engine.EmbeddingsDims = &dims
+		}
+	}
+
+	done <- struct{}{}
 }
