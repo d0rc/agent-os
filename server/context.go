@@ -24,14 +24,21 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 
 	return &Context{
 		Config:  config,
-		Log:     lg,
+		Log:     lg.With().Str("cfg-file", configPath).Logger(),
 		Storage: db,
 	}, nil
 }
 
 func (ctx *Context) Run() {
+	if len(ctx.Config.Compute) > 0 {
+		go ctx.autoDetectCompute()
+	} else {
+		ctx.Log.Warn().Msg("no compute section in config")
+	}
 	if len(ctx.Config.VectorDBs) > 0 {
 		go ctx.backgroundEmbeddingsWorker()
+	} else {
+		ctx.Log.Warn().Msg("no vectorDBs section in config")
 	}
 }
 

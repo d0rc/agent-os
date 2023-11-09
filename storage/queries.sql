@@ -48,6 +48,37 @@ values (?,?,?,?,?,?,?);
 -- name: make-search-cache-hit
 update search_cache set cache_hits = cache_hits + 1 where id = ?;
 
+-- name: ddl-create-llm-embeddings
+CREATE TABLE `llm_embeddings` (
+    `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+    `model` varchar(255) DEFAULT NULL,
+    `namespace` varchar(255) DEFAULT NULL,
+    `namespace_id` bigint unsigned NOT NULL,
+    `embedding` mediumblob,
+    PRIMARY KEY (`id`),
+    KEY `lookup_key` (`model`,`namespace`,`namespace_id`));
+
+-- name: get-embeddings-by-id
+select id, model, namespace, namespace_id, embedding where id = ?;
+
+-- name: get-embeddings-by-text
+select id, model, text_hash, embedding where text_hash = ?;
+
+-- name: ddl-embeddings-queues
+create table embeddings_queues (
+    id bigint unsigned not null auto_increment,
+    queue_name varchar(255),
+    queue_pointer bigint unsigned,
+    primary key (id),
+    unique (queue_name)
+);
+
+-- name: set-embeddings-queue-pointer
+insert into embeddings_queues (queue_name, queue_pointer) on duplicate key update queue_pointer = queue_pointer;
+
+-- name: get-embeddings-queue-pointer
+select id, queue_name, queue_pointer from embeddings_queues where queue_name = ?;
+
 -- name: ddl-create-llm-cache
 create table if not exists llm_cache (
     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
