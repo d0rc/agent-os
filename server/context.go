@@ -31,7 +31,7 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 
 func (ctx *Context) Run() {
 	if len(ctx.Config.Compute) > 0 {
-		go ctx.autoDetectCompute()
+
 	} else {
 		ctx.Log.Warn().Msg("no compute section in config")
 	}

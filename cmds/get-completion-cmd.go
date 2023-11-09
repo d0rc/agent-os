@@ -1,6 +1,7 @@
 package cmds
 
 import (
+	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
 	"time"
@@ -75,7 +76,7 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCom
 		}
 	}
 
-	message := <-SendCompletionRequest(&GenerationSettings{
+	message := <-SendCompletionRequest(&engines.GenerationSettings{
 		Messages:        nil,
 		AfterJoinPrefix: "",
 		RawPrompt:       cr.RawPrompt,
@@ -83,7 +84,7 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCom
 		Temperature:     cr.Temperature,
 		StopTokens:      cr.StopTokens,
 		BestOf:          cr.BestOf,
-		StatisticsCallback: func(info *StatisticsInfo) {
+		StatisticsCallback: func(info *engines.StatisticsInfo) {
 
 		},
 		MaxRetries: 1,

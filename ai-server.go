@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
 	"github.com/rs/zerolog"
@@ -30,7 +31,9 @@ func main() {
 
 	ctx, err := server.NewContext("config.yaml", lg)
 
-	cmds.StartInferenceEngines()
+	engines.StartInferenceEngines()
+	go cmds.ProcessJobsQueue()
+	go ctx.Run()
 
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

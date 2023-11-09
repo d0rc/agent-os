@@ -1,4 +1,4 @@
-package cmds
+package engines
 
 import (
 	"fmt"
@@ -77,7 +77,11 @@ type InferenceEngine struct {
 	EmbeddingsDims        *uint64
 }
 
-var inferenceEngines []*InferenceEngine
+var InferenceEngines []*InferenceEngine
+
+func GetInferenceEngines() []*InferenceEngine {
+	return InferenceEngines
+}
 
 func init() {
 	localLLM := &InferenceEngine{
@@ -125,7 +129,7 @@ func init() {
 	}
 
 	fmt.Printf("localLLM: %v\n", localLLM)
-	inferenceEngines = []*InferenceEngine{
+	InferenceEngines = []*InferenceEngine{
 		localLLM,
 		remoteVLLM1,
 		remoteVLLM2,
@@ -138,18 +142,18 @@ func init() {
 
 func StartInferenceEngines() {
 	doneChannel := make(chan struct{}, 1024)
-	for _, engine := range inferenceEngines {
+	for _, engine := range InferenceEngines {
 		startInferenceEngine(engine, doneChannel)
 	}
 
-	for range inferenceEngines {
+	for range InferenceEngines {
 		<-doneChannel
 	}
 
 	tw := tablewriter.NewWriter(os.Stdout)
 	tw.SetHeader([]string{"Endpoint", "MaxBatchSize", "MaxRequests", "Models", "Ok", "EmbeddingsDims"})
 	tableData := make([][]string, 0)
-	for _, engine := range inferenceEngines {
+	for _, engine := range InferenceEngines {
 		tableData = append(tableData, []string{
 			engine.EndpointUrl,
 			fmt.Sprintf("%d", engine.MaxBatchSize),
@@ -161,8 +165,6 @@ func StartInferenceEngines() {
 	}
 	tw.AppendBulk(tableData)
 	tw.Render()
-
-	go processJobsQueue()
 }
 
 func toUint64(dims *uint64) string {
@@ -183,18 +185,18 @@ func startInferenceEngine(engine *InferenceEngine, done chan struct{}) {
 	// we need to send a completion request to the engine
 	// detect the model, then send embeddings request to the engine and
 	// detect the model and dimensions
-	_, err := runCompletionRequest(engine, []*jobQueueTask{
+	_, err := RunCompletionRequest(engine, []*JobQueueTask{
 		{
-			req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
 		},
 	})
 	if err != nil {
 		// engine failed to run completion
 	}
 
-	cEmb, err := runEmbeddingsRequest(engine, []*jobQueueTask{
+	cEmb, err := RunEmbeddingsRequest(engine, []*JobQueueTask{
 		{
-			req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
 		},
 	})
 
