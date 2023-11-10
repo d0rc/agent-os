@@ -120,7 +120,7 @@ func (ie *InferenceEngine) Run() {
 			}
 			ie.Nodes[nodeIdx].RequestsRunning++
 
-			go ie.Nodes[nodeIdx].RunBatch(batch[canSendJobType], nodeIdx, func(nodeIdx int, ts time.Time) {
+			go ie.Nodes[nodeIdx].RunBatch(ie.ComputeFunction, batch[canSendJobType], nodeIdx, func(nodeIdx int, ts time.Time) {
 				ie.Nodes[nodeIdx].TotalTimeConsumed += time.Since(ts)
 				ie.TotalRequestsProcessed++
 				ie.TotalJobsProcessed += uint64(len(batch[canSendJobType]))

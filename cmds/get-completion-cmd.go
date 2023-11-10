@@ -76,7 +76,7 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCom
 		}
 	}
 
-	message := <-SendCompletionRequest(&engines.GenerationSettings{
+	message := <-SendComputeRequest(ctx, &engines.GenerationSettings{
 		Messages:        nil,
 		AfterJoinPrefix: "",
 		RawPrompt:       cr.RawPrompt,

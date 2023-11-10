@@ -10,7 +10,7 @@ import (
 	"net/http"
 )
 
-func RunEmbeddingsRequest(inferenceEngine *InferenceEngine, batch []*JobQueueTask) ([]*vectors.Vector, error) {
+func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask) ([]*vectors.Vector, error) {
 	if len(batch) == 0 {
 		return nil, nil
 	}

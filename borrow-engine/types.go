@@ -1,6 +1,7 @@
 package borrow_engine
 
 import (
+	"github.com/d0rc/agent-os/engines"
 	"time"
 )
 
@@ -22,29 +23,12 @@ const (
 )
 
 type ComputeJob struct {
-	JobId      string
-	JobType    JobType
-	Priority   RequestPriority
-	Process    string
-	receivedAt time.Time
+	JobId              string
+	JobType            JobType
+	Priority           RequestPriority
+	Process            string
+	receivedAt         time.Time
+	GenerationSettings *engines.GenerationSettings
 }
 
-type InferenceEngine struct {
-	Nodes []*InferenceNode
-
-	// statistics
-	TotalJobsProcessed         uint64
-	TotalRequestsProcessed     uint64
-	TotalTimeConsumed          time.Duration
-	TotalTimeIdle              time.Duration
-	ProcessesTotalJobs         map[string]uint64
-	ProcessesTotalRequests     map[string]uint64
-	ProcessesTotalTimeConsumed map[string]time.Duration
-	ProcessesTotalTimeWaiting  map[string]time.Duration
-
-	// control channels
-	AddNodeChan         chan *InferenceNode
-	IncomingJobs        chan []*ComputeJob
-	InferenceDone       chan *InferenceNode
-	TotalTimeScheduling time.Duration
-}
+type ComputeFunction map[JobType]func(*InferenceNode, []*ComputeJob) []*ComputeJob

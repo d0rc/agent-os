@@ -1,10 +1,6 @@
 package engines
 
 import (
-	"fmt"
-	"github.com/logrusorgru/aurora"
-	"github.com/olekukonko/tablewriter"
-	"os"
 	"time"
 )
 
@@ -48,21 +44,11 @@ Please note that the actual parameters may vary depending on the specific implem
 
 */
 
-type EndpointProtocol int
-
-const (
-	EP_OpenAI = iota
-	EP_VLLM
-	EP_Custom
-)
-
-const A6000vLLMBatchSize = 128
 const InferenceTimeout = 600 * time.Second
 
-type InferenceEngine struct {
+type RemoteInferenceEngine struct {
 	EndpointUrl           string
 	EmbeddingsEndpointUrl string
-	Protocol              EndpointProtocol
 	MaxBatchSize          int
 	Performance           float32 // tokens per second
 	MaxRequests           int
@@ -77,117 +63,13 @@ type InferenceEngine struct {
 	EmbeddingsDims        *uint64
 }
 
-var InferenceEngines []*InferenceEngine
-
-func GetInferenceEngines() []*InferenceEngine {
-	return InferenceEngines
-}
-
-func init() {
-	localLLM := &InferenceEngine{
-		EndpointUrl:           "http://localhost:8000/v1/completions",
-		EmbeddingsEndpointUrl: "http://127.0.0.1:8000/v1/embeddings",
-		Protocol:              EP_OpenAI,
-		MaxBatchSize:          1,
-		Performance:           0,
-		MaxRequests:           1,
-		Models:                []string{""},
-	}
-
-	remoteVLLM1 := &InferenceEngine{
-		EndpointUrl:  "http://127.0.0.1:8001/v1/completions",
-		Protocol:     EP_OpenAI,
-		MaxBatchSize: A6000vLLMBatchSize,
-		Performance:  0,
-		MaxRequests:  1,
-		Models:       []string{""},
-	}
-
-	remoteVLLM2 := &InferenceEngine{
-		EndpointUrl:  "http://127.0.0.1:8002/v1/completions",
-		Protocol:     EP_OpenAI,
-		MaxBatchSize: A6000vLLMBatchSize,
-		Performance:  0,
-		MaxRequests:  1,
-		Models:       []string{""},
-	}
-	remoteVLLM3 := &InferenceEngine{
-		EndpointUrl:  "http://127.0.0.1:8003/v1/completions",
-		Protocol:     EP_OpenAI,
-		MaxBatchSize: A6000vLLMBatchSize,
-		Performance:  0,
-		MaxRequests:  1,
-		Models:       []string{""},
-	}
-	remoteVLLM4 := &InferenceEngine{
-		EndpointUrl:  "http://127.0.0.1:8004/v1/completions",
-		Protocol:     EP_OpenAI,
-		MaxBatchSize: A6000vLLMBatchSize,
-		Performance:  0,
-		MaxRequests:  1,
-		Models:       []string{""},
-	}
-
-	fmt.Printf("localLLM: %v\n", localLLM)
-	InferenceEngines = []*InferenceEngine{
-		localLLM,
-		remoteVLLM1,
-		remoteVLLM2,
-		remoteVLLM3,
-		remoteVLLM4,
-	}
-
-	// inferenceEngines = []*InferenceEngine{inferenceEngines[1]}
-}
-
-func StartInferenceEngines() {
-	doneChannel := make(chan struct{}, 1024)
-	for _, engine := range InferenceEngines {
-		startInferenceEngine(engine, doneChannel)
-	}
-
-	for range InferenceEngines {
-		<-doneChannel
-	}
-
-	tw := tablewriter.NewWriter(os.Stdout)
-	tw.SetHeader([]string{"Endpoint", "MaxBatchSize", "MaxRequests", "Models", "Ok", "EmbeddingsDims"})
-	tableData := make([][]string, 0)
-	for _, engine := range InferenceEngines {
-		tableData = append(tableData, []string{
-			engine.EndpointUrl,
-			fmt.Sprintf("%d", engine.MaxBatchSize),
-			fmt.Sprintf("%d", engine.MaxRequests),
-			fmt.Sprintf("%v", takeLastNRunes(engine.Models[0], 75)),
-			fmt.Sprintf("%s", aurora.BrightGreen("YES")),
-			fmt.Sprintf("%v", toUint64(engine.EmbeddingsDims)),
-		})
-	}
-	tw.AppendBulk(tableData)
-	tw.Render()
-}
-
-func toUint64(dims *uint64) string {
-	if dims == nil {
-		return "N/A"
-	}
-	return fmt.Sprintf("%d", *dims)
-}
-
-func takeLastNRunes(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[len(s)-n:]
-}
-
-func startInferenceEngine(engine *InferenceEngine, done chan struct{}) {
+func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
 	// we need to send a completion request to the engine
 	// detect the model, then send embeddings request to the engine and
 	// detect the model and dimensions
 	_, err := RunCompletionRequest(engine, []*JobQueueTask{
 		{
-			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+			Req: &GenerationSettings{RawPrompt: "### Instruction\nProvide an answer. 2 + 2 = ?\n### Assistant: ", MaxRetries: 1, Temperature: 0.1},
 		},
 	})
 	if err != nil {
@@ -196,7 +78,7 @@ func startInferenceEngine(engine *InferenceEngine, done chan struct{}) {
 
 	cEmb, err := RunEmbeddingsRequest(engine, []*JobQueueTask{
 		{
-			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1},
+			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1, Temperature: 0.1},
 		},
 	})
 

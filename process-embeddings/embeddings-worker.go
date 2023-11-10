@@ -46,14 +46,6 @@ func BackgroundEmbeddingsWorker(ctx *server.Context) {
 	defaultVectorStorage := ctx.VectorDBs[0]
 	// let's find out what models for embeddings do we have at hand
 	// this can only be done by using completion command which will scan available models
-	embeddingEngines := make([]*engines.InferenceEngine, 0)
-	for idx, inferenceEngine := range engines.GetInferenceEngines() {
-		if inferenceEngine.EmbeddingsDims != nil && *inferenceEngine.EmbeddingsDims > 0 {
-			embeddingEngines = append(embeddingEngines, engines.GetInferenceEngines()[idx])
-		}
-	}
-
-	defaultEmbeddingEngine := embeddingEngines[0]
 	// let's start processing embeddings, first lets read our queue pointer
 	// and then start processing embeddings
 	pointers := make([]EmbeddingsQueueRecord, 0, 1)
@@ -64,11 +56,19 @@ func BackgroundEmbeddingsWorker(ctx *server.Context) {
 		ctx.Log.Error().Err(err).Msg("error getting embeddings queue pointer")
 		return
 	}
+
+	if ctx.GetDefaultEmbeddingDims() == 0 {
+		ctx.Log.Error().Msg("no default embedding dims found")
+		return
+	}
+
+	ctx.Log.Info().Msgf("default embedding dims: %d", ctx.GetDefaultEmbeddingDims())
+
 	if len(pointers) == 0 {
 		// there's no queue, it means we've never processed embeddings
 		// so, let's create a new collection in our vector storage
 		err = defaultVectorStorage.CreateCollection(defaultCollectionName, &vectors.CollectionParameters{
-			Dimensions: *defaultEmbeddingEngine.EmbeddingsDims,
+			Dimensions: ctx.GetDefaultEmbeddingDims(),
 		})
 		if err != nil {
 			lg.Error().Err(err).
@@ -80,10 +80,10 @@ func BackgroundEmbeddingsWorker(ctx *server.Context) {
 		}
 	}
 
-	processEmbeddings(defaultEmbeddingEngine, defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg)
+	//processEmbeddings(defaultEmbeddingEngine, defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg)
 }
 
-func processEmbeddings(engine *engines.InferenceEngine, vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger) {
+func processEmbeddings(engine *engines.RemoteInferenceEngine, vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger) {
 	pointersMap := make(map[string]*EmbeddingsQueueRecord)
 	for _, pointer := range *pointers {
 		pointersMap[pointer.QueueName] = &pointer

@@ -6,8 +6,10 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.4.1
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/blockloop/scan v1.3.0
+	github.com/dustin/go-humanize v1.0.1
 	github.com/gchaincl/dotsql v1.0.0
 	github.com/go-sql-driver/mysql v1.7.1
+	github.com/google/uuid v1.1.2
 	github.com/henomis/qdrant-go v1.0.2
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/logrusorgru/aurora v2.0.3+incompatible
@@ -23,7 +25,6 @@ require (
 require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/henomis/restclientgo v1.0.5 // indirect

@@ -25,9 +25,12 @@ type ConfigurationFile struct {
 	} `yaml:"tools"`
 	VectorDBs []VectorDBConfigurationSection `yaml:"vector-dbs"`
 	Compute   []struct {
-		Endpoint     string `yaml:"endpoint"`
-		Type         string `yaml:"type"`
-		MaxBatchSize int    `yaml:"max-batch-size"`
+		Endpoint           string   `yaml:"endpoint"`
+		EmbeddingsEndpoint string   `yaml:"embeddings-endpoint"`
+		Type               string   `yaml:"type"`
+		MaxBatchSize       int      `yaml:"max-batch-size"`
+		MaxRequests        int      `yaml:"max-requests"`
+		JobTypes           []string `yaml:"job-types"`
 	} `yaml:"compute"`
 }
 
