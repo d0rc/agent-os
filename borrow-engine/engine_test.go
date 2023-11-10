@@ -7,6 +7,7 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"math/rand"
 	"os"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -30,9 +31,11 @@ const (
 )
 
 type ComputeJob struct {
-	JobId    string
-	JobType  JobType
-	Priority RequestPriority
+	JobId      string
+	JobType    JobType
+	Priority   RequestPriority
+	Process    string
+	receivedAt time.Time
 }
 
 type InferenceNode struct {
@@ -82,10 +85,13 @@ type InferenceEngine struct {
 
 func NewInferenceEngine() *InferenceEngine {
 	return &InferenceEngine{
-		Nodes:         []*InferenceNode{},
-		AddNodeChan:   make(chan *InferenceNode, 16384),
-		IncomingJobs:  make(chan []*ComputeJob, 16384),
-		InferenceDone: make(chan *InferenceNode, 16384),
+		Nodes:                      []*InferenceNode{},
+		AddNodeChan:                make(chan *InferenceNode, 16384),
+		IncomingJobs:               make(chan []*ComputeJob, 16384),
+		InferenceDone:              make(chan *InferenceNode, 16384),
+		ProcessesTotalJobs:         make(map[string]uint64),
+		ProcessesTotalTimeWaiting:  make(map[string]time.Duration),
+		ProcessesTotalTimeConsumed: make(map[string]time.Duration),
 	}
 }
 
@@ -134,6 +140,7 @@ func (ie *InferenceEngine) Run() {
 			case jobs := <-ie.IncomingJobs:
 				for _, job := range jobs {
 					jobsBufferLock.Lock()
+					ie.ProcessesTotalJobs[job.Process]++
 					jobsBuffer[job.Priority] = append(jobsBuffer[job.Priority], job)
 					jobsBufferLock.Unlock()
 				}
@@ -212,6 +219,11 @@ func (ie *InferenceEngine) Run() {
 				ie.TotalRequestsProcessed++
 				ie.TotalJobsProcessed += uint64(len(batch[canSendJobType]))
 				ie.TotalTimeConsumed += time.Since(ts)
+				jobsBufferLock.Lock()
+				for _, job := range batch[canSendJobType] {
+					ie.ProcessesTotalTimeConsumed[job.Process] += time.Since(ts)
+				}
+				jobsBufferLock.Unlock()
 				ie.Nodes[nodeIdx].RequestsRunning--
 				ie.Nodes[nodeIdx].TotalRequestsProcessed++
 				ie.Nodes[nodeIdx].TotalJobsProcessed += uint64(len(batch[canSendJobType]))
@@ -229,6 +241,7 @@ func (ie *InferenceEngine) Run() {
 					for idx, jobInBuffer := range jobsBuffer[priority] {
 						if jobInBuffer.JobId == job.JobId {
 							jobsBuffer[priority] = append(jobsBuffer[priority][:idx], jobsBuffer[priority][idx+1:]...)
+							ie.ProcessesTotalTimeWaiting[job.Process] += time.Since(job.receivedAt)
 							break
 						}
 					}
@@ -267,6 +280,38 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[RequestPriority][]*ComputeJob
 		})
 	}
 	tw.Render()
+
+	tw = tablewriter.NewWriter(os.Stdout)
+	tw.SetHeader([]string{"Process", "TotalJobsProcessed", "TotalTimeConsumed", "AvgWait"})
+	lock.RLock()
+
+	type ProcessInfo struct {
+		TotalJobs uint64
+		Name      string
+	}
+	processInfo := make([]ProcessInfo, 0, len(ie.ProcessesTotalJobs))
+	for process, tj := range ie.ProcessesTotalJobs {
+		processInfo = append(processInfo, ProcessInfo{
+			TotalJobs: tj,
+			Name:      process,
+		})
+	}
+	// sort processInfo, make process with most jobs first
+	// use library sort
+	sort.Slice(processInfo, func(i, j int) bool {
+		return processInfo[i].TotalJobs > processInfo[j].TotalJobs
+	})
+
+	for _, processData := range processInfo {
+		tw.Append([]string{
+			processData.Name,
+			fmt.Sprintf("%d", ie.ProcessesTotalJobs[processData.Name]),
+			fmt.Sprintf("%s", ie.ProcessesTotalTimeConsumed[processData.Name]),
+			fmt.Sprintf("%s", fmt.Sprintf("%4.4f", float64(ie.ProcessesTotalTimeWaiting[processData.Name]/time.Millisecond)/float64(ie.ProcessesTotalJobs[processData.Name]))),
+		})
+	}
+	lock.RUnlock()
+	tw.Render()
 }
 
 func countMapValueLens(buffer map[RequestPriority][]*ComputeJob, lock *sync.RWMutex) int {
@@ -293,7 +338,8 @@ func getJobsByType(buffer []*ComputeJob, types []JobType) map[JobType][]*Compute
 	return jobsByType
 }
 
-func (ie *InferenceEngine) AddJob(process string, job *ComputeJob) {
+func (ie *InferenceEngine) AddJob(job *ComputeJob) {
+	job.receivedAt = time.Now()
 	ie.IncomingJobs <- []*ComputeJob{job}
 }
 
@@ -337,8 +383,9 @@ func TestComputeRoutingWorksTest(t *testing.T) {
 				JobId:    fmt.Sprintf("job-%d", i),
 				JobType:  JobType(rand.Intn(2)),
 				Priority: RequestPriority(rand.Intn(4)),
+				Process:  processes[(rand.Int()%len(processes)+rand.Int()%len(processes)+rand.Int()%len(processes))/3],
 			}
-			engine.AddJob(processes[rand.Int()%len(processes)], job)
+			engine.AddJob(job)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
