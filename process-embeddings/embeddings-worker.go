@@ -1,6 +1,7 @@
 package process_embeddings
 
 import (
+	"crypto/sha512"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
@@ -130,6 +131,8 @@ func processEmbeddings(engine *engines.InferenceEngine, vectorDb vectors.VectorD
 		}
 
 		lg.Info().Msgf("processing %d records", len(llmCacheRecords))
+		// first we need to check if have embeddings already for this exact texts
+		// so hash_sums has to be calculated
 
 		jobs := make([]*engines.JobQueueTask, 0, len(llmCacheRecords))
 		for _, llmCacheRecord := range llmCacheRecords {
@@ -169,4 +172,11 @@ func startQdrant(vectorDB *settings.VectorDBConfigurationSection, ctx *server.Co
 
 	ctx.VectorDBs = append(ctx.VectorDBs, vectorDb)
 	return nil
+}
+
+func hashSum(s string) string {
+	// let's use sha512 for now
+	sha512engine := sha512.New()
+	sha512engine.Write([]byte(s))
+	return string(sha512engine.Sum(nil))
 }

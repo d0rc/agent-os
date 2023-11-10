@@ -54,15 +54,16 @@ CREATE TABLE  if not exists  `llm_embeddings` (
     `model` varchar(255) DEFAULT NULL,
     `namespace` varchar(255) DEFAULT NULL,
     `namespace_id` bigint unsigned NOT NULL,
+    text_hash varchar(255) DEFAULT NULL,
     `embedding` mediumblob,
     PRIMARY KEY (`id`),
     KEY `lookup_key` (`model`,`namespace`,`namespace_id`));
 
 -- name: get-embeddings-by-id
-select id, model, namespace, namespace_id, embedding where id = ?;
+select id, model, namespace, namespace_id, text_hash, embedding where id = ?;
 
 -- name: get-embeddings-by-text
-select id, model, text_hash, embedding where text_hash = ?;
+select id, model, namespace, namespace_id, text_hash, embedding where text_hash = ?;
 
 -- name: ddl-embeddings-queues
 create table  if not exists  embeddings_queues (
