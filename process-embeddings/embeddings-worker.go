@@ -2,11 +2,13 @@ package process_embeddings
 
 import (
 	"crypto/sha512"
+	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/settings"
 	"github.com/d0rc/agent-os/vectors"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog"
 	"time"
 )
@@ -17,7 +19,7 @@ const (
 	VDB_QDRANT VectorDBType = "qdrant"
 )
 
-const defaultCollectionName = "embeddings-llm-cache"
+const defaultCollectionNamePrefix = "embeddings-llm-cache"
 
 type EmbeddingsQueueRecord struct {
 	Id           int64  `db:"id"`
@@ -44,6 +46,9 @@ func BackgroundEmbeddingsWorker(ctx *server.Context, name string) {
 	}
 
 	defaultVectorStorage := ctx.VectorDBs[0]
+	defaultCollectionName := fmt.Sprintf("%s-%d",
+		defaultCollectionNamePrefix,
+		ctx.GetDefaultEmbeddingDims())
 	// let's find out what models for embeddings do we have at hand
 	// this can only be done by using completion command which will scan available models
 	// let's start processing embeddings, first lets read our queue pointer
@@ -64,11 +69,12 @@ func BackgroundEmbeddingsWorker(ctx *server.Context, name string) {
 
 	ctx.Log.Info().Msgf("default embedding dims: %d", ctx.GetDefaultEmbeddingDims())
 
-	if len(pointers) == 0 {
+	if len(pointers) == 0 || pointers[0].QueuePointer == 0 {
 		// there's no queue, it means we've never processed embeddings
 		// so, let's create a new collection in our vector storage
 		err = defaultVectorStorage.CreateCollection(defaultCollectionName, &vectors.CollectionParameters{
-			Dimensions: ctx.GetDefaultEmbeddingDims(),
+			Dimensions:      ctx.GetDefaultEmbeddingDims(),
+			DistanceMeasure: vectors.DistanceCosine,
 		})
 		if err != nil {
 			lg.Error().Err(err).
@@ -89,24 +95,24 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		pointersMap[pointer.QueueName] = &pointer
 	}
 
-	if pointersMap[defaultCollectionName] == nil {
-		res, err := ctx.Storage.Db.Exec("set-embeddings-queue-pointer", defaultCollectionName, 0)
+	if pointersMap[collection] == nil {
+		res, err := ctx.Storage.Db.Exec("set-embeddings-queue-pointer", collection, 0)
 		if err != nil {
 			lg.Error().Err(err).
-				Str("collection", defaultCollectionName).
+				Str("collection", collection).
 				Msg("error setting embeddings queue pointer")
 			return
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
 			lg.Fatal().Err(err).
-				Str("collection", defaultCollectionName).
+				Str("collection", collection).
 				Msg("error getting last insert id")
 			return
 		}
-		pointersMap[defaultCollectionName] = &EmbeddingsQueueRecord{
+		pointersMap[collection] = &EmbeddingsQueueRecord{
 			Id:           id,
-			QueueName:    defaultCollectionName,
+			QueueName:    collection,
 			QueuePointer: 0,
 		}
 	}
@@ -116,7 +122,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		llmCacheRecords := make([]cmds.CompletionCacheRecord, 0, batchSize)
 		err := ctx.Storage.Db.GetStructsSlice("query-llm-cache-by-ids-multi",
 			&llmCacheRecords,
-			pointersMap[defaultCollectionName].QueuePointer,
+			pointersMap[collection].QueuePointer,
 			batchSize)
 
 		if err != nil {
@@ -135,6 +141,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		// so hash_sums has to be calculated
 
 		jobs := make([]cmds.GetEmbeddingsRequest, 0, len(llmCacheRecords))
+		maxId := int64(0)
 		for _, llmCacheRecord := range llmCacheRecords {
 			jobs = append(jobs, cmds.GetEmbeddingsRequest{
 				Model:           "*",
@@ -148,10 +155,14 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 				MetaNamespace:   "llm-cache-generation",
 				MetaNamespaceId: llmCacheRecord.Id,
 			})
+
+			if llmCacheRecord.Id > maxId {
+				maxId = llmCacheRecord.Id
+			}
 		}
 
 		ts := time.Now()
-		_, err = cmds.ProcessGetEmbeddings(jobs, ctx, process, borrow_engine.PRIO_Background)
+		response, err := cmds.ProcessGetEmbeddings(jobs, ctx, process, borrow_engine.PRIO_Background)
 		if err != nil {
 			lg.Error().Err(err).
 				Msgf("error getting embeddings in %v", time.Since(ts))
@@ -159,8 +170,23 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 			continue
 		}
 
+		// let's write embeddings into our vector storage
+		vectorsSlice := make([]*vectors.Vector, 0, len(response.GetEmbeddingsResponse))
+		for _, embedding := range response.GetEmbeddingsResponse {
+			vectorsSlice = append(vectorsSlice, &vectors.Vector{
+				Id:     uuid.New().String(),
+				VecF64: embedding.Embeddings,
+			})
+		}
+		err = vectorDb.InsertVectors(collection, vectorsSlice)
+		if err != nil {
+			ctx.Log.Error().Err(err).
+				Msgf("error inserting vectors into collection %s", collection)
+		}
+
 		//lg.Info().
 		//	Msgf("got embeddings for %d records, in %v", len(response.GetEmbeddingsResponse), time.Since(ts))
+		pointersMap[collection].QueuePointer += maxId
 	}
 }
 
