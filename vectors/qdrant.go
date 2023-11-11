@@ -50,7 +50,7 @@ func (q *QdrantClient) InsertVectors(collection string, vectors []*Vector) error
 		points[idx] = request.Point{
 			ID:      vector.Id,
 			Vector:  vector.VecF64,
-			Payload: nil,
+			Payload: vector.Payload,
 		}
 	}
 

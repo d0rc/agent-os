@@ -118,7 +118,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 	}
 
 	for {
-		batchSize := 25
+		batchSize := 1
 		llmCacheRecords := make([]cmds.CompletionCacheRecord, 0, batchSize)
 		err := ctx.Storage.Db.GetStructsSlice("query-llm-cache-by-ids-multi",
 			&llmCacheRecords,
@@ -174,8 +174,12 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		vectorsSlice := make([]*vectors.Vector, 0, len(response.GetEmbeddingsResponse))
 		for _, embedding := range response.GetEmbeddingsResponse {
 			vectorsSlice = append(vectorsSlice, &vectors.Vector{
-				Id:     uuid.New().String(),
+				Id:     uuid.NewHash(sha512.New(), uuid.Nil, []byte(embedding.TextHash), 5).String(),
 				VecF64: embedding.Embeddings,
+				Payload: map[string]interface{}{
+					"model": embedding.Model,
+					"text":  embedding.Text,
+				},
 			})
 		}
 		err = vectorDb.InsertVectors(collection, vectorsSlice)

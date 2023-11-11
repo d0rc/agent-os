@@ -112,6 +112,9 @@ func processGetEmbeddings(cr GetEmbeddingsRequest, ctx *server.Context, process 
 	}
 
 	response.Embeddings = embeddings.VecF64
+	response.TextHash = textHash
+	response.Model = *embeddings.Model
+	response.Text = cr.RawPrompt
 
 	// ctx.Log.Info().Msgf("Got embeddings for prompt %d", len(cr.RawPrompt))
 	return response, nil

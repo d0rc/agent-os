@@ -58,6 +58,9 @@ type GetEmbeddingsRequest struct {
 
 type GetEmbeddingsResponse struct {
 	Embeddings []float64 `json:"embeddings"`
+	TextHash   string    `json:"text-hash"`
+	Model      string    `json:"model"`
+	Text       string    `json:"text"`
 }
 
 type GetCompletionResponse struct {

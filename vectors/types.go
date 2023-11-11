@@ -1,9 +1,10 @@
 package vectors
 
 type Vector struct {
-	Id     string    `json:"id"`
-	VecF64 []float64 `json:"vecF64"`
-	Model  *string   `json:"model"`
+	Id      string                 `json:"id"`
+	VecF64  []float64              `json:"vecF64"`
+	Model   *string                `json:"model"`
+	Payload map[string]interface{} `json:"payload"`
 }
 
 type SearchSettings struct {
