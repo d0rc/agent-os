@@ -4,7 +4,24 @@ AgencyOS is not an operating system for computer users, but rather a computation
 
 A glimpse of what `top` output looks like:
 
-![image-20231110183317674](docs/top-screen.png)
+![image-20231111193034735](/Users/ds/Documents/sources/open-source/agent-os/docs/top-screen.png)
+
+On this screen:
+
+- It's 501 jobs already done;
+- System made it by making 20 requests;
+- Total time spent making each request is 15 minutes and 7.5 seconds;
+- Inference engines were idle (all summed up) for 4.9 seconds;
+- Current jobs buffer is 0(+0 - unsorted queue of jobs without priority);
+- Time system spent in attempt to come up with optimal batches - 13.7 ms;
+- Total OS uptime is 15 minutes 28.6 seconds.
+- There's only one inference engine (with primary endpoint being on port 8000);
+- During making screen short end point was busy, running 1 request;
+- This endpoint is configured to have not more then 1 request and batches of maximum size of 128;
+- Since start up inference engine executed 20 request, summing up to 501 individual jobs (including auto-detect job in start-up sequence);
+- In total this inference engine was running for 15 minutes and 7.5 seconds;
+- And this inference engine was idle for 4.9 seconds, since start-up;
+- There's one process running with name `background[embeddings]`, which is a system process, which automatically creates embeddings of all data accessible to the OS, using the first model, running on the engine with embeddings capabilities.
 
 Discord community: https://discord.gg/Runy3ueJZY
 
