@@ -77,7 +77,7 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	// now, let us parse all the response
 	parsedResponse := &embeddingsResponse{}
 	err = json.Unmarshal(result, parsedResponse)
-	if err != nil {
+	if err != nil || parsedResponse.Data == nil {
 		zlog.Error().Err(err).
 			Str("response", string(result)).
 			Msg("error unmarshalling response")

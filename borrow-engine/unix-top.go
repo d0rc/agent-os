@@ -32,7 +32,7 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 	tw.SetHeader([]string{"Endpoint", "Compute State", "Max (reqs/batch)", "Reqs/Jobs", "TotalTimeConsumed", "TotalTimeIdle"})
 	for _, node := range ie.Nodes {
 		tw.Append([]string{
-			node.EndpointUrl,
+			shoLastNRunes(node.EndpointUrl, 35),
 			fmt.Sprintf("%v", getNodeState(node.RequestsRunning)),
 			fmt.Sprintf("%d/%d", node.MaxRequests, node.MaxBatchSize),
 			fmt.Sprintf("%d/%d", node.TotalRequestsProcessed, node.TotalJobsProcessed),
@@ -73,6 +73,16 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 	}
 	lock.RUnlock()
 	tw.Render()
+}
+
+func shoLastNRunes(url string, i int) string {
+	// show last i runes of url, if url is shorter than i, show whole url
+	// prepend with ... if url is longer than i
+	if len(url) <= i {
+		return url
+	}
+
+	return fmt.Sprintf("...%s", url[len(url)-i:])
 }
 
 func getNodeState(running int) interface{} {
