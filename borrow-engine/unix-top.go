@@ -29,15 +29,13 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 		getUptime())
 	fmt.Printf(topLines)
 	tw := tablewriter.NewWriter(os.Stdout)
-	tw.SetHeader([]string{"Endpoint", "Requests", "MaxRequests", "MaxBatchSize", "TotalJobsProcessed", "TotalRequestsProcessed", "TotalTimeConsumed", "TotalTimeIdle"})
+	tw.SetHeader([]string{"Endpoint", "Compute State", "Max (reqs/batch)", "Reqs/Jobs", "TotalTimeConsumed", "TotalTimeIdle"})
 	for _, node := range ie.Nodes {
 		tw.Append([]string{
 			node.EndpointUrl,
 			fmt.Sprintf("%v", getNodeState(node.RequestsRunning)),
-			fmt.Sprintf("%d", node.MaxRequests),
-			fmt.Sprintf("%d", node.MaxBatchSize),
-			fmt.Sprintf("%d", node.TotalJobsProcessed),
-			fmt.Sprintf("%d", node.TotalRequestsProcessed),
+			fmt.Sprintf("%d/%d", node.MaxRequests, node.MaxBatchSize),
+			fmt.Sprintf("%d/%d", node.TotalRequestsProcessed, node.TotalJobsProcessed),
 			fmt.Sprintf("%s", node.TotalTimeConsumed),
 			fmt.Sprintf("%s", node.TotalTimeIdle),
 		})

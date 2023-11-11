@@ -9,6 +9,11 @@ tools:
   proxy-crawl:
     token: ${PROXY_CRAWL_TOKEN}
 
+vector-dbs:
+  - type: qdrant
+    api-token: "secret-api-key"
+    endpoint: http://localhost:6333 # if in doubt, check scripts/start-qdrant.sh
+
 compute:
   - endpoint: http://localhost:8001/v1/completions
     type: http-openai
