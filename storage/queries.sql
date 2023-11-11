@@ -119,7 +119,7 @@ insert into llm_cache (model, prompt, prompt_length, created_at, generation_sett
 select id, model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result from llm_cache where id = ?;
 
 -- name: query-llm-cache-by-ids-multi
-select id, model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result from llm_cache where id > ? limit ?;
+select id, model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result from llm_cache where id > ? order by id limit ?;
 
 -- name: query-llm-cache
 select id,
