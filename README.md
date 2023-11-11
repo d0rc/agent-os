@@ -4,7 +4,7 @@ AgencyOS is not an operating system for computer users, but rather a computation
 
 A glimpse of what `top` output looks like:
 
-![image-20231111193034735](/Users/ds/Documents/sources/open-source/agent-os/docs/top-screen.png)
+![image-20231111193034735](docs/top-screen.png)
 
 On this screen:
 
