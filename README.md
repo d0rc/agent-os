@@ -6,6 +6,8 @@ A glimpse of what `top` output looks like:
 
 ![image-20231110183317674](docs/top-screen.png)
 
+Discord community: https://discord.gg/Runy3ueJZY
+
 ## Features
 
 - High-performance multi-agent execution environment for mixed compute
