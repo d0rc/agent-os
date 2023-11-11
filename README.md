@@ -2,6 +2,13 @@
 
 AgencyOS is not an operating system for computer users, but rather a computational environment designed specifically for AI agents running on computing infrastructure. It's a Golang library and small wrapper around it - the server binary. The server acts as an orchestration platform providing agents with high-performance cached tools API, state of the art compute router, which supports routing requests to remote cloud GPUs, local GPUs, or even customer's own remote hardware.
 
+## What is it
+
+- High-performance multi-agent execution environment for mixed compute
+- A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops
+
+## Unix `top` style bird-eyes view
+
 A glimpse of what `top` output looks like:
 
 ![image-20231111193034735](docs/top-screen.png)
@@ -25,10 +32,28 @@ On this screen:
 
 Discord community: https://discord.gg/Runy3ueJZY
 
-## Features
+# Feature list (growing)
 
-- High-performance multi-agent execution environment for mixed compute
-- A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops
+- [ ] Plugins to support automated or user-controlled rent of servers;
+
+- [x] Automatic load balancing API over available compute with automatic batching;
+- [x] Priority queue for LLM requests;
+
+- [x] General vector storage support;
+- [x] Qdrant vector database support;
+- [x] Caching of all LLM requests;
+- [x] Caching of all Agent API requests, including web search and download;
+- [x] Retry policy and multiple inference support in cache;
+- [x] Process accounting support;
+- [x] Compute accounting support;
+- [ ]  Agent RAG APIs;
+- [x] Agent Google Search API;
+- [x] Agent Web Browsing and summarizing API;
+
+- [x] Console user interface;
+- [ ] OpenAI compatible end-point;
+
+- [ ] Image support (yes, even in console...).
 
 ## Notes on special features
 
@@ -37,13 +62,6 @@ Discord community: https://discord.gg/Runy3ueJZY
 - Yes, we have a toolset for extracting successful inference paths (to facilitate **synthetic training dataset** creations for specific tasks, in fact the system was build with this option in mind), if you need it - open an issue, we'll try to sort it out ASAP;
 - Yes, there're remote server orchestration tools, which can be open sourced, we have a toolset for `vast.ai`, but almost any cloud provider can be integrated and supported with automatic nodes management;
 - Yes, there is a way to automatically discover maximum batch size for given model, but it would require a benchmarking suite start-up mode - quite easy, but not a priority.
-
-### Coming Soon
-
-- Plugins to support automated or user-controlled rent of servers
-- Internal vector storage and RAG APIs
-- Console user interface
-- Image support (yes, even in console...)
 
 Combined with LLM request caching, tracking, tagging, tracing, AgencyOS offers a powerful computational environment for AI agents.
 
