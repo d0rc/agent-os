@@ -61,6 +61,8 @@ type RemoteInferenceEngine struct {
 	LeasedAt              time.Time
 	Busy                  bool
 	EmbeddingsDims        *uint64
+	CompletionFailed      bool
+	EmbeddingsFailed      bool
 }
 
 func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
@@ -74,6 +76,7 @@ func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
 	})
 	if err != nil {
 		// engine failed to run completion
+		engine.CompletionFailed = true
 	}
 
 	cEmb, err := RunEmbeddingsRequest(engine, []*JobQueueTask{
@@ -81,9 +84,9 @@ func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
 			Req: &GenerationSettings{RawPrompt: "Hello world", MaxRetries: 1, Temperature: 0.1},
 		},
 	})
-
 	if err != nil {
 		// engine failed to run embeddings
+		engine.EmbeddingsFailed = true
 	}
 
 	if len(cEmb) > 0 {

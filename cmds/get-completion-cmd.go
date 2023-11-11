@@ -1,6 +1,7 @@
 package cmds
 
 import (
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
 	"github.com/logrusorgru/aurora"
@@ -76,19 +77,24 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCom
 		}
 	}
 
-	message := <-SendComputeRequest(ctx, &engines.GenerationSettings{
-		Messages:        nil,
-		AfterJoinPrefix: "",
-		RawPrompt:       cr.RawPrompt,
-		NoCache:         false,
-		Temperature:     cr.Temperature,
-		StopTokens:      cr.StopTokens,
-		BestOf:          cr.BestOf,
-		StatisticsCallback: func(info *engines.StatisticsInfo) {
+	results := SendComputeRequest(ctx,
+		"",
+		borrow_engine.JT_Completion,
+		borrow_engine.PRIO_User,
+		&engines.GenerationSettings{
+			Messages:        nil,
+			AfterJoinPrefix: "",
+			RawPrompt:       cr.RawPrompt,
+			NoCache:         false,
+			Temperature:     cr.Temperature,
+			StopTokens:      cr.StopTokens,
+			BestOf:          cr.BestOf,
+			StatisticsCallback: func(info *engines.StatisticsInfo) {
 
-		},
-		MaxRetries: 1,
-	})
+			},
+			MaxRetries: 1,
+		})
+	message := <-results.CompletionChannel
 
 	_, err = ctx.Storage.Db.Exec("insert-llm-cache-record",
 		cr.Model,

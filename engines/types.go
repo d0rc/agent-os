@@ -36,5 +36,5 @@ type StatisticsInfo struct {
 type JobQueueTask struct {
 	Req           *GenerationSettings
 	Res           chan *Message
-	resEmbeddings chan *vectors.Vector
+	ResEmbeddings chan *vectors.Vector
 }

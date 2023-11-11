@@ -56,14 +56,32 @@ CREATE TABLE  if not exists  `llm_embeddings` (
     `namespace_id` bigint unsigned NOT NULL,
     text_hash varchar(255) DEFAULT NULL,
     `embedding` mediumblob,
+    dims bigint unsigned not null,
+    cache_hits int unsigned default 0,
     PRIMARY KEY (`id`),
-    KEY `lookup_key` (`model`,`namespace`,`namespace_id`));
+    KEY `lookup_key` (`model`,`namespace`,`namespace_id`),
+    unique `text_hash` (`model`, `text_hash`)) ROW_FORMAT=COMPRESSED;
+
+-- name: make-embeddings-cache-hit
+update llm_embeddings set cache_hits = cache_hits + 1 where id = ?;
+
+-- name: insert-embeddings-cache-record
+insert into llm_embeddings (
+    model,
+    namespace,
+    namespace_id,
+    text_hash,
+    dims,
+    embedding) values (?,?,?,?,?,?) on duplicate key update embedding = values(embedding);
+
+-- name: query-embeddings-cache
+select id, model, namespace, namespace_id, text_hash, embedding from llm_embeddings where model = ? and text_hash = ?;
 
 -- name: get-embeddings-by-id
-select id, model, namespace, namespace_id, text_hash, embedding where id = ?;
+select id, model, namespace, namespace_id, text_hash, embedding from llm_embeddings where id = ?;
 
 -- name: get-embeddings-by-text
-select id, model, namespace, namespace_id, text_hash, embedding where text_hash = ?;
+select id, model, namespace, namespace_id, text_hash, embedding from llm_embeddings where text_hash = ?;
 
 -- name: ddl-embeddings-queues
 create table  if not exists  embeddings_queues (

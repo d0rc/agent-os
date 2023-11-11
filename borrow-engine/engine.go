@@ -2,6 +2,7 @@ package borrow_engine
 
 import (
 	"github.com/d0rc/agent-os/engines"
+	zlog "github.com/rs/zerolog/log"
 	"time"
 )
 
@@ -66,8 +67,17 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 
 	go func() {
 		<-doneChannel
-		autodetectFinished <- node
-		ie.AddNodeChan <- node
+		if node.RemoteEngine.CompletionFailed &&
+			node.RemoteEngine.EmbeddingsFailed {
+			// engine failed to run completion and embeddings
+			// we can't use it
+			zlog.Info().Str("url", node.EndpointUrl).Msg("compute node failed to run completion and embeddings")
+			autodetectFinished <- node
+		} else {
+			autodetectFinished <- node
+			ie.AddNodeChan <- node
+			ie.InferenceDone <- node
+		}
 	}()
 
 	return autodetectFinished

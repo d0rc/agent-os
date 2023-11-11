@@ -31,7 +31,9 @@ func main() {
 
 	ctx, err := server.NewContext("config.yaml", lg)
 
-	go ctx.Start(process_embeddings.BackgroundEmbeddingsWorker)
+	go ctx.Start(func(ctx *server.Context) {
+		ctx.LaunchWorker("background[embeddings]", process_embeddings.BackgroundEmbeddingsWorker)
+	})
 
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

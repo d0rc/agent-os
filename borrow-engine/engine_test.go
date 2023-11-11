@@ -57,7 +57,7 @@ func TestComputeRoutingWorksTest(t *testing.T) {
 			job := &ComputeJob{
 				JobId:    fmt.Sprintf("job-%d", i),
 				JobType:  JobType(rand.Intn(2)),
-				Priority: RequestPriority(rand.Intn(4)),
+				Priority: JobPriority(rand.Intn(4)),
 				Process:  processes[(rand.Int()%len(processes)+rand.Int()%len(processes)+rand.Int()%len(processes))/3],
 			}
 			engine.AddJob(job)

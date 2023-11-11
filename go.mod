@@ -16,6 +16,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/rs/zerolog v1.31.0
 	github.com/serpapi/google-search-results-golang v0.0.0-20230616000151-95707d993dc6
+	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
 	golang.org/x/crypto v0.12.0
 	golang.org/x/term v0.11.0
@@ -26,6 +27,7 @@ require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/deckarep/golang-set v1.8.0 // indirect
 	github.com/edsrzf/mmap-go v1.1.0 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/henomis/restclientgo v1.0.5 // indirect
 	github.com/jdkato/prose/v2 v2.0.0 // indirect
@@ -33,6 +35,9 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mingrammer/commonregex v1.0.1 // indirect
+	github.com/tklauser/go-sysconf v0.3.12 // indirect
+	github.com/tklauser/numcpus v0.6.1 // indirect
+	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	golang.org/x/net v0.14.0 // indirect
 	golang.org/x/sys v0.12.0 // indirect
 	gonum.org/v1/gonum v0.11.0 // indirect

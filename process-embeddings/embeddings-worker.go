@@ -2,8 +2,8 @@ package process_embeddings
 
 import (
 	"crypto/sha512"
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/settings"
 	"github.com/d0rc/agent-os/vectors"
@@ -25,7 +25,7 @@ type EmbeddingsQueueRecord struct {
 	QueuePointer int64  `db:"queue_pointer"`
 }
 
-func BackgroundEmbeddingsWorker(ctx *server.Context) {
+func BackgroundEmbeddingsWorker(ctx *server.Context, name string) {
 	// let's see what we have in our vector DBs configs
 	lg := ctx.Log.With().Str("bg-wrk", "embeddings").Logger()
 	for _, vectorDB := range ctx.Config.VectorDBs {
@@ -80,10 +80,10 @@ func BackgroundEmbeddingsWorker(ctx *server.Context) {
 		}
 	}
 
-	//processEmbeddings(defaultEmbeddingEngine, defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg)
+	processEmbeddings(defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg, name)
 }
 
-func processEmbeddings(engine *engines.RemoteInferenceEngine, vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger) {
+func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger, process string) {
 	pointersMap := make(map[string]*EmbeddingsQueueRecord)
 	for _, pointer := range *pointers {
 		pointersMap[pointer.QueueName] = &pointer
@@ -130,28 +130,28 @@ func processEmbeddings(engine *engines.RemoteInferenceEngine, vectorDb vectors.V
 			continue
 		}
 
-		lg.Info().Msgf("processing %d records", len(llmCacheRecords))
-		// first we need to check if have embeddings already for this exact texts
+		// lg.Info().Msgf("processing %d records", len(llmCacheRecords))
+		// first we need to check if we have embeddings already for this exact texts
 		// so hash_sums has to be calculated
 
-		jobs := make([]*engines.JobQueueTask, 0, len(llmCacheRecords))
+		jobs := make([]cmds.GetEmbeddingsRequest, 0, len(llmCacheRecords))
 		for _, llmCacheRecord := range llmCacheRecords {
-			jobs = append(jobs, &engines.JobQueueTask{
-				Req: &engines.GenerationSettings{
-					RawPrompt: llmCacheRecord.Prompt,
-				},
+			jobs = append(jobs, cmds.GetEmbeddingsRequest{
+				Model:           "*",
+				RawPrompt:       llmCacheRecord.Prompt,
+				MetaNamespace:   "llm-cache-prompt",
+				MetaNamespaceId: llmCacheRecord.Id,
 			})
-			jobs = append(jobs, &engines.JobQueueTask{
-				Req: &engines.GenerationSettings{
-					RawPrompt: llmCacheRecord.GenerationResult,
-				},
+			jobs = append(jobs, cmds.GetEmbeddingsRequest{
+				Model:           "*",
+				RawPrompt:       llmCacheRecord.GenerationResult,
+				MetaNamespace:   "llm-cache-generation",
+				MetaNamespaceId: llmCacheRecord.Id,
 			})
 		}
 
 		ts := time.Now()
-		res, err := engines.RunEmbeddingsRequest(
-			engine, jobs)
-
+		_, err = cmds.ProcessGetEmbeddings(jobs, ctx, process, borrow_engine.PRIO_Background)
 		if err != nil {
 			lg.Error().Err(err).
 				Msgf("error getting embeddings in %v", time.Since(ts))
@@ -159,8 +159,8 @@ func processEmbeddings(engine *engines.RemoteInferenceEngine, vectorDb vectors.V
 			continue
 		}
 
-		lg.Info().
-			Msgf("got embeddings for %d records, in %v", len(res), time.Since(ts))
+		//lg.Info().
+		//	Msgf("got embeddings for %d records, in %v", len(response.GetEmbeddingsResponse), time.Since(ts))
 	}
 }
 

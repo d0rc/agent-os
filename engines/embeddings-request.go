@@ -92,10 +92,12 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			VecF64: parsedResponse.Data[idx].Embedding,
 			Model:  &parsedResponse.Model,
 		}
-		if job.resEmbeddings != nil {
-			job.resEmbeddings <- results[idx]
+		if job.ResEmbeddings != nil {
+			job.ResEmbeddings <- results[idx]
 		}
 	}
+
+	// zlog.Debug().Msgf("Returning %d results", len(results))
 
 	return results, nil
 }

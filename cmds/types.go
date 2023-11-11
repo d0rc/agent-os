@@ -1,5 +1,7 @@
 package cmds
 
+import borrow_engine "github.com/d0rc/agent-os/borrow-engine"
+
 type GetPageRequest struct {
 	Url        string `json:"url"`
 	TimeOut    int    `json:"time-out"`
@@ -47,19 +49,34 @@ type GetCompletionRequest struct {
 	BestOf      int      `json:"best-of"`
 }
 
+type GetEmbeddingsRequest struct {
+	Model           string `json:"model-mask"` // * - any model
+	RawPrompt       string `json:"raw-prompt"` //
+	MetaNamespace   string `json:"meta-namespace"`
+	MetaNamespaceId int64  `json:"meta-namespace-id"`
+}
+
+type GetEmbeddingsResponse struct {
+	Embeddings []float64 `json:"embeddings"`
+}
+
 type GetCompletionResponse struct {
 	Choices []string `json:"choices"`
 }
 
 type ClientRequest struct {
-	Tags                  []string               `json:"tags"`
-	GetPageRequests       []GetPageRequest       `json:"get-page-request"`
-	GoogleSearchRequests  []GoogleSearchRequest  `json:"google-search-request"`
-	GetCompletionRequests []GetCompletionRequest `json:"get-completion-requests"`
+	Tags                  []string                  `json:"tags"`
+	ProcessName           string                    `json:"process-name"`
+	Priority              borrow_engine.JobPriority `json:"priority"`
+	GetPageRequests       []GetPageRequest          `json:"get-page-request"`
+	GoogleSearchRequests  []GoogleSearchRequest     `json:"google-search-request"`
+	GetCompletionRequests []GetCompletionRequest    `json:"get-completion-requests"`
+	GetEmbeddingsRequests []GetEmbeddingsRequest    `json:"get-embeddings-requests"`
 }
 
 type ServerResponse struct {
 	GoogleSearchResponse  []*GoogleSearchResponse  `json:"google-search-response"`
 	GetPageResponse       []*GetPageResponse       `json:"get-page-response"`
 	GetCompletionResponse []*GetCompletionResponse `json:"get-completion-response"`
+	GetEmbeddingsResponse []*GetEmbeddingsResponse `json:"get-embeddings-response"`
 }

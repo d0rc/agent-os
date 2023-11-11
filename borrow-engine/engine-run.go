@@ -6,7 +6,7 @@ import (
 )
 
 func (ie *InferenceEngine) Run() {
-	jobsBuffer := map[RequestPriority][]*ComputeJob{
+	jobsBuffer := map[JobPriority][]*ComputeJob{
 		PRIO_System:     []*ComputeJob{},
 		PRIO_Kernel:     []*ComputeJob{},
 		PRIO_User:       []*ComputeJob{},
@@ -17,15 +17,18 @@ func (ie *InferenceEngine) Run() {
 	go func() {
 		for {
 			ie.PrintTop(jobsBuffer, &jobsBufferLock)
-			time.Sleep(1 * time.Second)
+			time.Sleep(TopPrintingInterval)
 		}
 	}()
 
 	for {
 		attemptProcessing := false
 
+		timer := time.NewTimer(100 * time.Millisecond)
 		if countMapValueLens(jobsBuffer, &jobsBufferLock) > 1024 {
 			select {
+			case <-timer.C:
+				attemptProcessing = true
 			case node := <-ie.AddNodeChan:
 				node.LastIdleAt = time.Now()
 				ie.Nodes = append(ie.Nodes, node)
@@ -36,6 +39,8 @@ func (ie *InferenceEngine) Run() {
 			}
 		} else {
 			select {
+			case <-timer.C:
+				attemptProcessing = true
 			case node := <-ie.AddNodeChan:
 				node.LastIdleAt = time.Now()
 				ie.Nodes = append(ie.Nodes, node)
@@ -44,6 +49,7 @@ func (ie *InferenceEngine) Run() {
 			case _ = <-ie.InferenceDone:
 				attemptProcessing = true
 			case jobs := <-ie.IncomingJobs:
+				// fmt.Printf("Recieved %d jobs\n", len(jobs))
 				for _, job := range jobs {
 					jobsBufferLock.Lock()
 					ie.ProcessesTotalJobs[job.Process]++
@@ -108,12 +114,16 @@ func (ie *InferenceEngine) Run() {
 				}
 			}
 
+			// fmt.Printf("canSend: %v, canSendJobType: %v, haveAtLeastOneJobType: %v\n",
+			//	canSend, canSendJobType, haveAtLeastOneJobType)
+
 			if !canSend {
 				continue
 			}
 
 			// we have a batch to send
 			// let's send it
+			// fmt.Printf("Sending batch of %d jobs to node %s\n", len(batch[canSendJobType]), ie.Nodes[nodeIdx].EndpointUrl)
 			if ie.Nodes[nodeIdx].RequestsRunning == 0 {
 				ie.Nodes[nodeIdx].TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)
 				ie.TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)

@@ -2,6 +2,7 @@ package server
 
 import (
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
+	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/settings"
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/vectors"
@@ -27,9 +28,29 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 
 	computeRouter := borrow_engine.NewInferenceEngine(borrow_engine.ComputeFunction{
 		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) []*borrow_engine.ComputeJob {
+			lg.Warn().Msg("completion job received")
 			return jobs
 		},
 		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) []*borrow_engine.ComputeJob {
+			//			lg.Warn().Msg("embedding job received")
+			tasks := make([]*engines.JobQueueTask, len(jobs))
+			resChan := make([]chan *vectors.Vector, len(jobs))
+			for idx, job := range jobs {
+				resChan[idx] = make(chan *vectors.Vector, 1)
+				tasks[idx] = &engines.JobQueueTask{
+					Req:           job.GenerationSettings,
+					ResEmbeddings: resChan[idx],
+				}
+			}
+			_, err := engines.RunEmbeddingsRequest(n.RemoteEngine, tasks)
+			if err != nil {
+				lg.Error().Err(err).Msg("error running embeddings request")
+			}
+			//			lg.Warn().Msg("embedding request done")
+
+			for idx, job := range jobs {
+				job.ComputeResult.EmbeddingChannel <- <-resChan[idx]
+			}
 			return jobs
 		},
 	})
@@ -52,7 +73,7 @@ func (ctx *Context) GetDefaultEmbeddingDims() uint64 {
 	return 0
 }
 
-func (ctx *Context) Start(embeddingsWorker func(ctx *Context)) {
+func (ctx *Context) Start(onStart func(ctx *Context)) {
 	if len(ctx.Config.Compute) > 0 {
 		go ctx.ComputeRouter.Run()
 		detectedComputes := make([]chan *borrow_engine.InferenceNode, 0, len(ctx.Config.Compute))
@@ -73,11 +94,12 @@ func (ctx *Context) Start(embeddingsWorker func(ctx *Context)) {
 	} else {
 		ctx.Log.Warn().Msg("no compute section in config")
 	}
-	if len(ctx.Config.VectorDBs) > 0 {
-		go embeddingsWorker(ctx)
-	} else {
-		ctx.Log.Warn().Msg("no vectorDBs section in config")
-	}
+
+	onStart(ctx)
+}
+
+func (ctx *Context) LaunchWorker(name string, embeddingsWorker func(ctx *Context, name string)) {
+	go embeddingsWorker(ctx, name)
 }
 
 func translateJobTypes(types []string) []borrow_engine.JobType {

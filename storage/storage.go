@@ -49,7 +49,7 @@ func (s *Storage) execDDLs() {
 	}
 }
 
-func getHash(s string) string {
+func GetHash(s string) string {
 	// generate SHA-512 hash for string
 	h := sha512.New()
 	h.Write([]byte(s))
@@ -64,7 +64,7 @@ type computeCacheRecord struct {
 
 func (s *Storage) GetTaskCachedResult(namespace, task string) ([]byte, error) {
 	results := make([]computeCacheRecord, 0)
-	err := s.Db.GetStructsSlice("get-task-cache-record", &results, namespace, getHash(task))
+	err := s.Db.GetStructsSlice("get-task-cache-record", &results, namespace, GetHash(task))
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +81,6 @@ func (s *Storage) GetTaskCachedResult(namespace, task string) ([]byte, error) {
 }
 
 func (s *Storage) SaveTaskCacheResult(namespace, task string, result []byte) error {
-	_, err := s.Db.Exec("save-task-cache-record", namespace, getHash(task), result)
+	_, err := s.Db.Exec("save-task-cache-record", namespace, GetHash(task), result)
 	return err
 }
