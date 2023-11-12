@@ -27,11 +27,11 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 	db, err := storage.NewStorage(lg)
 
 	computeRouter := borrow_engine.NewInferenceEngine(borrow_engine.ComputeFunction{
-		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) []*borrow_engine.ComputeJob {
+		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
 			lg.Warn().Msg("completion job received")
-			return jobs
+			return jobs, nil
 		},
-		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) []*borrow_engine.ComputeJob {
+		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
 			//			lg.Warn().Msg("embedding job received")
 			tasks := make([]*engines.JobQueueTask, len(jobs))
 			resChan := make([]chan *vectors.Vector, len(jobs))
@@ -44,14 +44,15 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 			}
 			_, err := engines.RunEmbeddingsRequest(n.RemoteEngine, tasks)
 			if err != nil {
-				lg.Error().Err(err).Msg("error running embeddings request")
+				// lg.Error().Err(err).Msg("error running embeddings request")
+				return nil, err
 			}
 			//			lg.Warn().Msg("embedding request done")
 
 			for idx, job := range jobs {
 				job.ComputeResult.EmbeddingChannel <- <-resChan[idx]
 			}
-			return jobs
+			return jobs, nil
 		},
 	})
 

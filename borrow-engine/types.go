@@ -38,4 +38,4 @@ type ComputeJob struct {
 	ComputeResult      *ComputeResult
 }
 
-type ComputeFunction map[JobType]func(*InferenceNode, []*ComputeJob) []*ComputeJob
+type ComputeFunction map[JobType]func(*InferenceNode, []*ComputeJob) ([]*ComputeJob, error)

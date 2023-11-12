@@ -47,9 +47,9 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 
 	// whatever happened here, it's not of our business, we should just log it
 	if err != nil {
-		zlog.Error().Err(err).
-			Interface("batch", batch).
-			Msg("error sending request")
+		//zlog.Error().Err(err).
+		//	Interface("batch", batch).
+		//	Msg("error sending request")
 		return nil, err
 	}
 	if resp.StatusCode != 200 {

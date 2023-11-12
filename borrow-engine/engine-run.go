@@ -71,6 +71,9 @@ func (ie *InferenceEngine) Run() {
 			if ie.Nodes[nodeIdx].RequestsRunning >= ie.Nodes[nodeIdx].MaxRequests {
 				continue
 			}
+			if time.Since(ie.Nodes[nodeIdx].LastFailure) < 5*time.Second {
+				continue
+			}
 			// we have an available node...! let's try to
 			// get node.MaxBatchSize jobs from the buffer
 			// but we can only run jobs of the same type
@@ -148,6 +151,24 @@ func (ie *InferenceEngine) Run() {
 					ie.Nodes[nodeIdx].LastIdleAt = time.Now()
 				}
 				ie.InferenceDone <- ie.Nodes[nodeIdx]
+			}, func(nodeIdx int, ts time.Time, err error) {
+				// fmt.Printf("Batch of %d jobs on node %s failed\n", len(batch[canSendJobType]), ie.Nodes[nodeIdx].EndpointUrl)
+				ie.Nodes[nodeIdx].TotalTimeWaisted += time.Since(ts)
+				ie.TotalTimeWaisted += time.Since(ts)
+				ie.TotalRequestsFailed++
+
+				ie.Nodes[nodeIdx].TotalRequestsFailed++
+				ie.Nodes[nodeIdx].TotalJobsFailed += uint64(len(batch[canSendJobType]))
+
+				ie.Nodes[nodeIdx].LastFailure = time.Now()
+				go func() {
+					ie.IncomingJobs <- batch[canSendJobType]
+				}()
+
+				ie.Nodes[nodeIdx].RequestsRunning--
+				if ie.Nodes[nodeIdx].RequestsRunning == 0 {
+					ie.Nodes[nodeIdx].LastIdleAt = time.Now()
+				}
 			})
 
 			// drop jobs from the buffer

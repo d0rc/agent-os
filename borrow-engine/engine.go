@@ -25,7 +25,9 @@ type InferenceEngine struct {
 	InferenceDone       chan *InferenceNode
 	TotalTimeScheduling time.Duration
 
-	ComputeFunction ComputeFunction
+	ComputeFunction     ComputeFunction
+	TotalTimeWaisted    time.Duration
+	TotalRequestsFailed uint64
 }
 
 func NewInferenceEngine(f ComputeFunction) *InferenceEngine {
