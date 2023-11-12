@@ -21,7 +21,7 @@ func NewQdrantClient(config *settings.VectorDBConfigurationSection) (VectorDB, e
 }
 
 func (q *QdrantClient) CreateCollection(collection string, params *CollectionParameters) error {
-	//onDisk := true
+	onDisk := true
 	resp := &response.CollectionCreate{}
 	err := q.client.CollectionCreate(
 		context.Background(),
@@ -30,7 +30,7 @@ func (q *QdrantClient) CreateCollection(collection string, params *CollectionPar
 			Vectors: request.VectorsParams{
 				Size:     params.Dimensions,
 				Distance: request.Distance(params.DistanceMeasure),
-				// OnDisk:   &onDisk,
+				OnDisk:   &onDisk,
 			},
 		},
 		resp,

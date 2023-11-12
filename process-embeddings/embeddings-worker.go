@@ -118,7 +118,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 	}
 
 	for {
-		batchSize := 4
+		batchSize := 128
 		llmCacheRecords := make([]cmds.CompletionCacheRecord, 0, batchSize)
 		err := ctx.Storage.Db.GetStructsSlice("query-llm-cache-by-ids-multi",
 			&llmCacheRecords,

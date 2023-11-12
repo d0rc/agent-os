@@ -32,7 +32,7 @@ On this screen:
 
 Discord community: https://discord.gg/Runy3ueJZY
 
-# Feature list (growing)
+# Features
 
 - [ ] Plugins to support automated or user-controlled rent of servers;
 
@@ -65,10 +65,13 @@ Discord community: https://discord.gg/Runy3ueJZY
 
 Combined with LLM request caching, tracking, tagging, tracing, AgencyOS offers a powerful computational environment for AI agents.
 
+Two M1 / M2 Macs serving embeddings for Mistral-7B-Dolphin-2.2.1 for my current data lake:
+
+![image-20231112010803161](docs/two-gpu-screen.png)
+
 # Table of Contents
 - [Features](#features)
 - [Notes on special features](#notes-on-special-features)
-  - [Coming Soon](#coming-soon)
 - [Introduction](#introduction)
 - [Getting Started](#getting-started)
 - [Configuration file](#configuration-file)
