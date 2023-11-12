@@ -59,6 +59,7 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 		return nil, err
 	}
 	// read resp.Body to result
+	defer resp.Body.Close()
 	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zlog.Error().Err(err).
