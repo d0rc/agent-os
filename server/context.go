@@ -7,6 +7,7 @@ import (
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/vectors"
 	"github.com/rs/zerolog"
+	"time"
 )
 
 type Context struct {
@@ -53,7 +54,15 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 			//			lg.Warn().Msg("embedding request done")
 
 			for idx, job := range jobs {
-				job.ComputeResult.EmbeddingChannel <- <-resChan[idx]
+				failureTimeout := time.NewTimer(120 * time.Second)
+				select {
+				case <-failureTimeout.C:
+					lg.Error().Msg("embedding request timed out")
+					return nil, err
+				case tmpResult := <-resChan[idx]:
+					job.ComputeResult.EmbeddingChannel <- tmpResult
+				}
+				//job.ComputeResult.EmbeddingChannel <- <-resChan[idx]
 			}
 			return jobs, nil
 		},
