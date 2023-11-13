@@ -12,7 +12,7 @@ import (
 
 func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask) ([]*vectors.Vector, error) {
 	if len(batch) == 0 {
-		return nil, nil
+		return nil, fmt.Errorf("empty batch for inference engine %v", inferenceEngine)
 	}
 	if inferenceEngine.EmbeddingsEndpointUrl == "" {
 		return nil, fmt.Errorf("embeddings endpoint is not configured for inference engine %v", inferenceEngine)

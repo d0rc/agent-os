@@ -33,6 +33,9 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 		},
 		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
 			//			lg.Warn().Msg("embedding job received")
+			if len(jobs) == 0 {
+				return nil, nil
+			}
 			tasks := make([]*engines.JobQueueTask, len(jobs))
 			resChan := make([]chan *vectors.Vector, len(jobs))
 			for idx, job := range jobs {

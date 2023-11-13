@@ -8,6 +8,7 @@ import (
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"strings"
+	"time"
 )
 
 //go:embed queries.sql
@@ -23,7 +24,10 @@ func NewStorage(lg zerolog.Logger) (*Storage, error) {
 		WithDB("ai_srv").
 		WithHost("127.0.0.1").
 		WithParseTime().
-		WithMaxConns(4096).
+		WithMaxConns(4).
+		WithMaxIdleConnTime(120 * time.Second).
+		WithMaxConnTime(600 * time.Second).
+		WithTCPTimeout(60 * time.Second).
 		WithQueries(&queriesFs).
 		Connect()
 	if err != nil {

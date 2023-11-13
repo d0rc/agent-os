@@ -7,6 +7,7 @@ import (
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/vectors"
+	"time"
 )
 
 func ProcessGetEmbeddings(request []GetEmbeddingsRequest, ctx *server.Context, process string, priority borrowengine.JobPriority) (response *ServerResponse, err error) {
@@ -50,12 +51,20 @@ type EmbeddingsCacheRecord struct {
 func processGetEmbeddings(cr GetEmbeddingsRequest, ctx *server.Context, process string, priority borrowengine.JobPriority) (*GetEmbeddingsResponse, error) {
 	cachedResponse := make([]EmbeddingsCacheRecord, 0, 1)
 	textHash := storage.GetHash(cr.RawPrompt)
+	retryCounter := 0
+retryLoop:
 	err := ctx.Storage.Db.GetStructsSlice("query-embeddings-cache", &cachedResponse,
 		cr.Model, textHash)
 	if err != nil {
+		time.Sleep(50 * time.Millisecond)
+		// just continue...
+		retryCounter++
+		if retryCounter < 3 {
+			goto retryLoop
+		}
+
 		ctx.Log.Error().Err(err).
 			Msgf("Failed to get cached response for prompt %s", cr.RawPrompt)
-		// just continue...
 	}
 
 	response := &GetEmbeddingsResponse{}
