@@ -89,3 +89,14 @@ func (ie *InferenceEngine) AddJob(job *ComputeJob) {
 	job.receivedAt = time.Now()
 	ie.IncomingJobs <- []*ComputeJob{job}
 }
+
+func (ie *InferenceEngine) WaitForNodeWithEmbeddings() (string, int, error) {
+	for {
+		for _, node := range ie.Nodes {
+			if node.RemoteEngine.EmbeddingsDims != nil {
+				return node.RemoteEngine.Models[0], int(*node.RemoteEngine.EmbeddingsDims), nil
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+}

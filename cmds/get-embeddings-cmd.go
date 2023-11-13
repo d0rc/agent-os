@@ -6,6 +6,7 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/storage"
+	"github.com/d0rc/agent-os/vectors"
 )
 
 func ProcessGetEmbeddings(request []GetEmbeddingsRequest, ctx *server.Context, process string, priority borrowengine.JobPriority) (response *ServerResponse, err error) {
@@ -60,14 +61,14 @@ func processGetEmbeddings(cr GetEmbeddingsRequest, ctx *server.Context, process 
 	response := &GetEmbeddingsResponse{}
 
 	if len(cachedResponse) > 0 {
-		decodedVector := make([]float64, 0)
+		decodedVector := &vectors.Vector{}
 		err := json.Unmarshal(cachedResponse[0].Embedding, &decodedVector)
 		if err != nil {
 			ctx.Log.Error().Err(err).
 				Msgf("Failed to decode cached embeddings for prompt %s", cr.RawPrompt)
 			// just continue...
 		} else {
-			response.Embeddings = decodedVector
+			response.Embeddings = decodedVector.VecF64
 			_, err := ctx.Storage.Db.Exec("make-embeddings-cache-hit", cachedResponse[0].Id)
 			if err != nil {
 				ctx.Log.Error().Err(err).

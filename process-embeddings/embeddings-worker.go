@@ -86,10 +86,19 @@ func BackgroundEmbeddingsWorker(ctx *server.Context, name string) {
 		}
 	}
 
-	processEmbeddings(defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg, name)
+	// let's wait for at least one compute node to appear
+	// with embedding capabilities
+	// and pick embedding model name from it
+	modelName, modelDims, err := ctx.ComputeRouter.WaitForNodeWithEmbeddings()
+	if err != nil {
+		lg.Fatal().Err(err).Msg("error waiting for compute node with embeddings")
+		return
+	}
+
+	processEmbeddings(defaultVectorStorage, defaultCollectionName, &pointers, ctx, lg, name, modelName, modelDims)
 }
 
-func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger, process string) {
+func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[]EmbeddingsQueueRecord, ctx *server.Context, lg zerolog.Logger, process string, modelName string, modelDims int) {
 	pointersMap := make(map[string]*EmbeddingsQueueRecord)
 	for _, pointer := range *pointers {
 		pointersMap[pointer.QueueName] = &pointer
@@ -144,13 +153,13 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		maxId := int64(0)
 		for _, llmCacheRecord := range llmCacheRecords {
 			jobs = append(jobs, cmds.GetEmbeddingsRequest{
-				Model:           "*",
+				Model:           modelName,
 				RawPrompt:       llmCacheRecord.Prompt,
 				MetaNamespace:   "llm-cache-prompt",
 				MetaNamespaceId: llmCacheRecord.Id,
 			})
 			jobs = append(jobs, cmds.GetEmbeddingsRequest{
-				Model:           "*",
+				Model:           modelName,
 				RawPrompt:       llmCacheRecord.GenerationResult,
 				MetaNamespace:   "llm-cache-generation",
 				MetaNamespaceId: llmCacheRecord.Id,

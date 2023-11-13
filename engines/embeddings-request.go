@@ -88,10 +88,11 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 
 	results := make([]*vectors.Vector, len(batch))
 	// ok now each choice goes to its caller
+	parsedModelName := parseModelName(parsedResponse.Model)
 	for idx, job := range batch {
 		results[idx] = &vectors.Vector{
 			VecF64: parsedResponse.Data[idx].Embedding,
-			Model:  &parsedResponse.Model,
+			Model:  &parsedModelName,
 		}
 		if job.ResEmbeddings != nil {
 			job.ResEmbeddings <- results[idx]

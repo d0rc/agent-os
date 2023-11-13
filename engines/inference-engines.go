@@ -1,6 +1,7 @@
 package engines
 
 import (
+	"strings"
 	"time"
 )
 
@@ -91,16 +92,17 @@ func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
 
 	if len(cEmb) > 0 {
 		if cEmb[0].Model != nil {
+			parsedModelName := parseModelName(*cEmb[0].Model)
 			added := false
 			for idx, model := range engine.Models {
-				if model == *cEmb[0].Model || model == "" {
+				if model == parsedModelName || model == "" {
 					added = true
-					engine.Models[idx] = *cEmb[0].Model
+					engine.Models[idx] = parsedModelName
 					break
 				}
 			}
 			if !added {
-				engine.Models = append(engine.Models, *cEmb[0].Model)
+				engine.Models = append(engine.Models, parsedModelName)
 			}
 		}
 		if len(cEmb[0].VecF64) > 0 {
@@ -110,4 +112,46 @@ func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
 	}
 
 	done <- struct{}{}
+}
+
+func parseModelName(s string) string {
+	// /Users/ds/.cache/lm-studio/models/TheBloke/dolphin-2.2.1-mistral-7B-GGUF/dolphin-2.2.1-mistral-7b.Q6_K.gguf
+	if strings.HasSuffix(s, ".gguf") {
+		// it's a filename, if there's a path, take the last two directories
+		// in this case, it's going to be "TheBloke/dolphin-2.2.1-mistral-7B-GGUF"
+		// if there's no path, take the last directory
+		// in this case, it's going to be "dolphin-2.2.1-mistral-7B-GGUF"
+		var modelName string
+
+		if strings.Contains(s, "/") {
+			parts := strings.Split(s, "/")
+			// last element is a filename, we don't need it
+			// just names of two directories, or even one, if it's in the root
+			// or something
+			if len(parts) > 2 {
+				// now starting with parts[len(parts)-3:] we have the last three
+				// including file name, which we do not need
+				modelName = strings.Join(parts[len(parts)-3:], "/")
+				// drop filename now
+				modelName = modelName[:len(modelName)-len(parts[len(parts)-1])]
+			} else {
+				modelName = parts[len(parts)-1]
+			}
+		} else {
+			modelName = s
+		}
+
+		if strings.HasSuffix(modelName, ".gguf") {
+			modelName = modelName[:len(modelName)-5]
+		}
+
+		// drop the trailing slash
+		if strings.HasSuffix(modelName, "/") {
+			modelName = modelName[:len(modelName)-1]
+		}
+
+		return modelName
+	}
+
+	return s
 }
