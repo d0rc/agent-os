@@ -103,7 +103,7 @@ func consoleInit(name string) (zerolog.Logger, chan []byte) {
 		}
 	} else {
 		if *termUi {
-			return zerolog.New(ChannelWriter{Channel: make(chan []byte)}), OutputChannel
+			return zerolog.New(ChannelWriter{Channel: OutputChannel}), OutputChannel
 		} else {
 			return zlog.Logger, OutputChannel
 		}
