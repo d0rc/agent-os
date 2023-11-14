@@ -8,6 +8,7 @@ require (
 	github.com/blockloop/scan v1.3.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gchaincl/dotsql v1.0.0
+	github.com/gizak/termui/v3 v3.1.0
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/google/uuid v1.1.2
 	github.com/henomis/qdrant-go v1.0.2
@@ -35,6 +36,8 @@ require (
 	github.com/mattn/go-isatty v0.0.19 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mingrammer/commonregex v1.0.1 // indirect
+	github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 // indirect
+	github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect

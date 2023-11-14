@@ -28,9 +28,16 @@ type InferenceEngine struct {
 	ComputeFunction     ComputeFunction
 	TotalTimeWaisted    time.Duration
 	TotalRequestsFailed uint64
+	settings            *InferenceEngineSettings
 }
 
-func NewInferenceEngine(f ComputeFunction) *InferenceEngine {
+type InferenceEngineSettings struct {
+	TopInterval time.Duration
+	TermUI      bool
+	LogChan     chan []byte
+}
+
+func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *InferenceEngine {
 	return &InferenceEngine{
 		Nodes:                      []*InferenceNode{},
 		AddNodeChan:                make(chan *InferenceNode, 16384),
@@ -40,6 +47,7 @@ func NewInferenceEngine(f ComputeFunction) *InferenceEngine {
 		ProcessesTotalTimeWaiting:  make(map[string]time.Duration),
 		ProcessesTotalTimeConsumed: make(map[string]time.Duration),
 		ComputeFunction:            f,
+		settings:                   settings,
 	}
 }
 

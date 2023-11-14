@@ -17,7 +17,7 @@ func (ie *InferenceEngine) Run() {
 	go func() {
 		for {
 			ie.PrintTop(jobsBuffer, &jobsBufferLock)
-			time.Sleep(TopPrintingInterval)
+			time.Sleep(ie.settings.TopInterval)
 		}
 	}()
 

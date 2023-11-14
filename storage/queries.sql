@@ -93,7 +93,7 @@ create table  if not exists  embeddings_queues (
 );
 
 -- name: set-embeddings-queue-pointer
-insert into embeddings_queues (queue_name, queue_pointer) values (?, ?) on duplicate key update queue_pointer = queue_pointer;
+insert into embeddings_queues (queue_name, queue_pointer) values (?, ?) on duplicate key update queue_pointer = values(queue_pointer);
 
 -- name: get-embeddings-queue-pointer
 select id, queue_name, queue_pointer from embeddings_queues where queue_name = ?;

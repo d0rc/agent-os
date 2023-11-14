@@ -203,6 +203,13 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 			len(response.GetEmbeddingsResponse),
 			time.Since(ts))*/
 		pointersMap[collection].QueuePointer = maxId
+		// set the queue pointer
+		_, err = ctx.Storage.Db.Exec("set-embeddings-queue-pointer", collection, maxId)
+		if err != nil {
+			lg.Error().Err(err).
+				Str("collection", collection).
+				Msg("error setting embeddings queue pointer")
+		}
 	}
 }
 

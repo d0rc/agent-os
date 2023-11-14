@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // the aim of the project is to provide agents with a way to
@@ -25,14 +26,20 @@ import (
 
 var port = flag.Int("port", 9000, "port to listen on")
 var host = flag.String("host", "0.0.0.0", "host to listen at")
+var topInterval = flag.Int("top-interval", 1000, "interval to update `top` (ms)")
+var termUi = flag.Bool("term-ui", true, "enable term ui")
 
 func main() {
-	lg := consoleInit("ai-srv")
+	lg, logChan := consoleInit("ai-srv")
 
-	ctx, err := server.NewContext("config.yaml", lg)
+	ctx, err := server.NewContext("config.yaml", lg, &server.Settings{
+		TopInterval: time.Duration(*topInterval) * time.Millisecond,
+		TermUI:      *termUi,
+		LogChan:     logChan,
+	})
 
 	go ctx.Start(func(ctx *server.Context) {
-		ctx.LaunchWorker("background[embeddings]", process_embeddings.BackgroundEmbeddingsWorker)
+		ctx.LaunchWorker("background{embeddings}", process_embeddings.BackgroundEmbeddingsWorker)
 	})
 
 	// start a http server on port 9000
@@ -75,21 +82,46 @@ func main() {
 	}
 }
 
-func consoleInit(name string) zerolog.Logger {
-	flag.Parse()
+type ChannelWriter struct {
+	Channel chan []byte
+}
 
+func (cw ChannelWriter) Write(p []byte) (n int, err error) {
+	cw.Channel <- p
+	return len(p), nil
+}
+
+var OutputChannel = make(chan []byte, 1024)
+
+func consoleInit(name string) (zerolog.Logger, chan []byte) {
+	flag.Parse()
 	if name != "" {
-		return zlog.With().Str("app", name).Logger()
+		if *termUi {
+			return zerolog.New(ChannelWriter{Channel: OutputChannel}).With().Str("app", name).Logger(), OutputChannel
+		} else {
+			return zlog.With().Str("app", name).Logger(), OutputChannel
+		}
 	} else {
-		return zlog.Logger
+		if *termUi {
+			return zerolog.New(ChannelWriter{Channel: make(chan []byte)}), OutputChannel
+		} else {
+			return zlog.Logger, OutputChannel
+		}
 	}
 }
 
 func init() {
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	zlog.Logger = zlog.
-		Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "02/01 15:04:05"}).
-		Hook(LineInfoHook{})
+	if *termUi {
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+		zlog.Logger = zlog.
+			Output(ChannelWriter{Channel: OutputChannel}).
+			Hook(LineInfoHook{})
+	} else {
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+		zlog.Logger = zlog.
+			Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "02/01 15:04:05"}).
+			Hook(LineInfoHook{})
+	}
 	setupForHighLoad()
 }
 

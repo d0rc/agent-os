@@ -11,6 +11,10 @@ AgencyOS is not an operating system for computer users, but rather a computation
 
 A glimpse of what `top` output looks like:
 
+![image-20231114023921839](docs/term-ui-top.png)
+
+ANSI terminal style `top` is available as well, with identical content:
+
 ![image-20231111193034735](docs/top-screen.png)
 
 On this screen:

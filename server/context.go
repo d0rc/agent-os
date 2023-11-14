@@ -19,7 +19,13 @@ type Context struct {
 	DefaultEmbeddingsDim int
 }
 
-func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
+type Settings struct {
+	TopInterval time.Duration
+	TermUI      bool
+	LogChan     chan []byte
+}
+
+func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*Context, error) {
 	config, err := settings.ProcessConfigurationFile(configPath)
 	if err != nil {
 		return nil, err
@@ -54,6 +60,9 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 			//			lg.Warn().Msg("embedding request done")
 
 			for idx, job := range jobs {
+				// TODO: remove timeout...!
+				// it was needed to prevent stalled compute
+				// but all bugs should be fixed now
 				failureTimeout := time.NewTimer(120 * time.Second)
 				select {
 				case <-failureTimeout.C:
@@ -66,6 +75,10 @@ func NewContext(configPath string, lg zerolog.Logger) (*Context, error) {
 			}
 			return jobs, nil
 		},
+	}, &borrow_engine.InferenceEngineSettings{
+		TopInterval: srvSettings.TopInterval,
+		TermUI:      srvSettings.TermUI,
+		LogChan:     srvSettings.LogChan,
 	})
 
 	return &Context{
@@ -111,8 +124,8 @@ func (ctx *Context) Start(onStart func(ctx *Context)) {
 	onStart(ctx)
 }
 
-func (ctx *Context) LaunchWorker(name string, embeddingsWorker func(ctx *Context, name string)) {
-	go embeddingsWorker(ctx, name)
+func (ctx *Context) LaunchWorker(name string, worker func(ctx *Context, name string)) {
+	go worker(ctx, name)
 }
 
 func translateJobTypes(types []string) []borrow_engine.JobType {

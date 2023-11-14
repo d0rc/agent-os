@@ -8,17 +8,39 @@ import (
 	osProcess "github.com/shirou/gopsutil/process"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
-const TopPrintingInterval = 1 * time.Second
-
 func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lock *sync.RWMutex) {
+	if ie.settings.TermUI == false {
+		// let's create a string builder
+		topInfo := ie.buildTopString(jobsBuffer, lock, false)
+
+		fmt.Printf("%s", topInfo.topString)
+	} else {
+		ie.ui(jobsBuffer, lock)
+	}
+}
+
+type topDataInfo struct {
+	topString      string
+	computeEngines [][]string
+	topLines       string
+	processesLines [][]string
+}
+
+func (ie *InferenceEngine) buildTopString(jobsBuffer map[JobPriority][]*ComputeJob, lock *sync.RWMutex, termUi bool) *topDataInfo {
+	result := &topDataInfo{
+		computeEngines: make([][]string, 0),
+	}
+	stringBuilder := &strings.Builder{}
+	// let's write to it
 	// clear screen
-	fmt.Printf("\033[2J")
+	fmt.Fprintf(stringBuilder, "\033[2J")
 	topLines := fmt.Sprintf("Total jobs: %s, Total requests: %d, Total time consumed: %s, Total time idle: %s\n",
-		aurora.BrightCyan(humanize.SIWithDigits(float64(ie.TotalJobsProcessed), 2, "j")),
+		makeBrightCyan(termUi, humanize.SIWithDigits(float64(ie.TotalJobsProcessed), 2, "j")),
 		ie.TotalRequestsProcessed,
 		ie.TotalTimeConsumed,
 		ie.TotalTimeIdle)
@@ -27,25 +49,35 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 		len(ie.IncomingJobs),
 		ie.TotalTimeScheduling,
 		getUptime())
-	fmt.Printf(topLines)
-	tw := tablewriter.NewWriter(os.Stdout)
-	tw.SetHeader([]string{"Endpoint", "Compute State", "Max (reqs/batch)", "Reqs/Jobs", "TimeConsumed", "TimeIdle", "T.Waisted", "Failed(R/J)"})
+	fmt.Fprintf(stringBuilder, topLines)
+	result.topLines = topLines
+	tw := tablewriter.NewWriter(stringBuilder)
+
+	computeEnginesHeaders := []string{"Endpoint", "Compute State", "Max (reqs/batch)", "Reqs/Jobs", "TimeConsumed", "TimeIdle", "T.Waisted", "Failed(R/J)"}
+	tw.SetHeader(computeEnginesHeaders)
+	result.computeEngines = append(result.computeEngines, computeEnginesHeaders)
+
 	for _, node := range ie.Nodes {
-		tw.Append([]string{
+		computeEnginesLine := []string{
 			shoLastNRunes(node.EndpointUrl, 35),
-			fmt.Sprintf("%v", getNodeState(node.RequestsRunning)),
+			fmt.Sprintf("%v", getNodeState(termUi, node.RequestsRunning)),
 			fmt.Sprintf("%d/%d", node.MaxRequests, node.MaxBatchSize),
 			fmt.Sprintf("%d/%d", node.TotalRequestsProcessed, node.TotalJobsProcessed),
 			fmt.Sprintf("%s", node.TotalTimeConsumed),
 			fmt.Sprintf("%s", node.TotalTimeIdle),
 			fmt.Sprintf("%s", node.TotalTimeWaisted),
 			fmt.Sprintf("%d/%d", node.TotalRequestsFailed, node.TotalJobsFailed),
-		})
+		}
+		tw.Append(computeEnginesLine)
+		result.computeEngines = append(result.computeEngines, computeEnginesLine)
 	}
 	tw.Render()
 
-	tw = tablewriter.NewWriter(os.Stdout)
-	tw.SetHeader([]string{"Process", "TotalJobsProcessed", "TotalTimeConsumed", "AvgWait"})
+	tw = tablewriter.NewWriter(stringBuilder)
+	processesHeadersLines := make([][]string, 0)
+	processesHeaders := []string{"Process", "TotalJobsProcessed", "TotalTimeConsumed", "AvgWait"}
+	tw.SetHeader(processesHeaders)
+	processesHeadersLines = append(processesHeadersLines, processesHeaders)
 	lock.RLock()
 
 	type ProcessInfo struct {
@@ -66,15 +98,29 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 	})
 
 	for _, processData := range processInfo {
-		tw.Append([]string{
+		processesHeadersLine := []string{
 			processData.Name,
 			fmt.Sprintf("%d", ie.ProcessesTotalJobs[processData.Name]),
 			fmt.Sprintf("%s", ie.ProcessesTotalTimeConsumed[processData.Name]),
 			fmt.Sprintf("%s", fmt.Sprintf("%4.4f", float64(ie.ProcessesTotalTimeWaiting[processData.Name]/time.Millisecond)/float64(ie.ProcessesTotalJobs[processData.Name]))),
-		})
+		}
+		tw.Append(processesHeadersLine)
+		processesHeadersLines = append(processesHeadersLines, processesHeadersLine)
 	}
 	lock.RUnlock()
 	tw.Render()
+
+	result.topString = stringBuilder.String()
+	result.processesLines = processesHeadersLines
+	return result
+}
+
+func makeBrightCyan(ui bool, digits string) string {
+	if !ui {
+		return aurora.BrightCyan(digits).String()
+	}
+
+	return fmt.Sprintf("[%s](fg:cyan,mod:bold)", digits)
 }
 
 func shoLastNRunes(url string, i int) string {
@@ -87,14 +133,30 @@ func shoLastNRunes(url string, i int) string {
 	return fmt.Sprintf("...%s", url[len(url)-i:])
 }
 
-func getNodeState(running int) interface{} {
+func getNodeState(ui bool, running int) interface{} {
 	if running == 0 {
-		return aurora.BrightWhite("idle")
+		return makeBrightWhite(ui, "idle")
 	}
 
-	return fmt.Sprintf("%s[%d]",
-		aurora.BrightGreen("busy"),
-		aurora.BrightCyan(running))
+	return fmt.Sprintf("%s - %s",
+		makeBrightGreen(ui, "busy"),
+		makeBrightCyan(ui, fmt.Sprintf("%d", running)))
+}
+
+func makeBrightGreen(ui bool, s string) string {
+	if !ui {
+		return aurora.BrightGreen(s).String()
+	}
+
+	return fmt.Sprintf("[%s](fg:green,mod:bold)", s)
+}
+
+func makeBrightWhite(ui bool, s string) string {
+	if !ui {
+		return aurora.BrightWhite(s).String()
+	}
+
+	return fmt.Sprintf("[%s](fg:white,mod:bold)", s)
 }
 
 func getUptime() time.Duration {
