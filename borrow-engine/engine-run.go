@@ -1,6 +1,7 @@
 package borrow_engine
 
 import (
+	"github.com/rs/zerolog/log"
 	"sync"
 	"time"
 )
@@ -175,6 +176,8 @@ func (ie *InferenceEngine) Run() {
 			// we have a batch to send
 			// let's send it
 			// fmt.Printf("Sending batch of %d jobs to node %s\n", len(batch[canSendJobType]), ie.Nodes[nodeIdx].EndpointUrl)
+			log.Trace().Msgf("Sending batch of %s(%d) jobs to node %s",
+				jobTypeName(canSendJobType), len(batch[canSendJobType]), ie.Nodes[nodeIdx].EndpointUrl)
 			if ie.Nodes[nodeIdx].RequestsRunning == 0 {
 				ie.Nodes[nodeIdx].TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)
 				ie.TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)
@@ -236,5 +239,16 @@ func (ie *InferenceEngine) Run() {
 		}
 
 		ie.TotalTimeScheduling += time.Since(tsScheduling)
+	}
+}
+
+func jobTypeName(jobType JobType) string {
+	switch jobType {
+	case JT_Embeddings:
+		return "embeddings"
+	case JT_Completion:
+		return "completion"
+	default:
+		return "unknown"
 	}
 }

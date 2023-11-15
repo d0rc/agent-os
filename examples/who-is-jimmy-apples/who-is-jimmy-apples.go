@@ -41,10 +41,10 @@ func main() {
 		History:        make([][]*engines.Message, 0),
 	}
 	results, err := agency.GeneralAgentPipelineStep(agentState,
-		0,
-		32,
-		100,
-		40,
+		0,   // currentDepth
+		32,  // batchSize
+		100, // maxSamplingAttempts
+		40,  // minResults
 		agentContext)
 
 	if err != nil {
@@ -55,5 +55,7 @@ func main() {
 		for _, res := range results {
 			fmt.Println(res.Content + "\n")
 		}
+
+		fmt.Println("Done - total results:", len(results))
 	}
 }
