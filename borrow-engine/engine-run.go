@@ -78,10 +78,6 @@ func (ie *InferenceEngine) Run() {
 			// get node.MaxBatchSize jobs from the buffer
 			// but we can only run jobs of the same type
 			batch := map[JobType][]*ComputeJob{}
-			type BatchMetaType struct {
-				jobType JobType
-				jobIdx  int
-			}
 
 			canSend := false
 			var haveAtLeastOneJobType JobType = JT_NotAJob
@@ -121,6 +117,38 @@ func (ie *InferenceEngine) Run() {
 			//	canSend, canSendJobType, haveAtLeastOneJobType)
 
 			if !canSend {
+				continue
+			}
+
+			// let's check node can run this types of jobs
+			jobTypesSwitchedAlready := false
+		switchJobTypes:
+			if len(batch[canSendJobType]) == 0 {
+				continue
+			}
+			nodeIsCompatible := false
+			for _, jt := range ie.Nodes[nodeIdx].JobTypes {
+				if jt == canSendJobType {
+					nodeIsCompatible = true
+					break
+				}
+			}
+			if !nodeIsCompatible {
+				if jobTypesSwitchedAlready {
+					continue
+				}
+				// either pick another job type, or just continue
+				// let's see if we have another job type
+				if canSendJobType == JT_Embeddings {
+					canSendJobType = JT_Completion
+					jobTypesSwitchedAlready = true
+					goto switchJobTypes
+				} else if canSendJobType == JT_Completion {
+					canSendJobType = JT_Embeddings
+					jobTypesSwitchedAlready = true
+					goto switchJobTypes
+				}
+
 				continue
 			}
 

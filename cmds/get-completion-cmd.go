@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func ProcessGetCompletions(request []GetCompletionRequest, ctx *server.Context) (response *ServerResponse, err error) {
+func ProcessGetCompletions(request []GetCompletionRequest, ctx *server.Context, process string, priority borrow_engine.JobPriority) (response *ServerResponse, err error) {
 	// I've found no evidence that vllm supports batching for real
 	// so we can just launch parallel processing now
 	// later comment: and it's not the right place to make automatic batching...:)
@@ -16,7 +16,7 @@ func ProcessGetCompletions(request []GetCompletionRequest, ctx *server.Context) 
 	for idx, pr := range request {
 		results[idx] = make(chan *GetCompletionResponse, 1)
 		go func(cr GetCompletionRequest, ch chan *GetCompletionResponse) {
-			completionResponse, err := processGetCompletion(cr, ctx)
+			completionResponse, err := processGetCompletion(cr, ctx, process, priority)
 			if err != nil {
 				ctx.Log.Error().Err(err).
 					Msgf("Error processing completion request: ```%s```", aurora.Cyan(cr.RawPrompt))
@@ -47,7 +47,7 @@ type CompletionCacheRecord struct {
 	GenerationResult             string    `db:"generation_result"`
 }
 
-func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCompletionResponse, error) {
+func processGetCompletion(cr GetCompletionRequest, ctx *server.Context, process string, priority borrow_engine.JobPriority) (*GetCompletionResponse, error) {
 	cachedResponse := make([]CompletionCacheRecord, 0, 1)
 	err := ctx.Storage.Db.GetStructsSlice("query-llm-cache", &cachedResponse,
 		len(cr.RawPrompt), cr.RawPrompt)
@@ -78,9 +78,9 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context) (*GetCom
 	}
 
 	results := SendComputeRequest(ctx,
-		"",
+		process,
 		borrow_engine.JT_Completion,
-		borrow_engine.PRIO_User,
+		priority,
 		&engines.GenerationSettings{
 			Messages:        nil,
 			AfterJoinPrefix: "",

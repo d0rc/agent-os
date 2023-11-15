@@ -2,7 +2,9 @@ package tools
 
 import (
 	"fmt"
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/server"
 	zlog "github.com/rs/zerolog/log"
 	"strings"
 )
@@ -63,7 +65,7 @@ func actualParse(newSourceData string, parser func(string) error) error {
 	return fmt.Errorf("failed to parse json: %v", err)
 }
 
-func LLMJSONParser(text string, storage *cmds.Storage, model string, parser func(string) error) error {
+func LLMJSONParser(text string, ctx *server.Context, model string, parser func(string) error) error {
 	prompt := fmt.Sprintf(`### Instruction
 Answer the question: Why this JSON is broken?
 
@@ -83,7 +85,7 @@ Take  a deep breath, think step by step. Check all brackets in place, no extra-b
 			StopTokens:  []string{"###"},
 			MinResults:  100,
 		},
-	}, storage)
+	}, ctx, "json-fixer", borrow_engine.PRIO_User)
 	if err != nil {
 		zlog.Error().Err(err).Msgf("failed to get completions in json-fixer")
 		return err
@@ -99,11 +101,11 @@ Take  a deep breath, think step by step. Check all brackets in place, no extra-b
 	return err
 }
 
-func TwoStepJSONParser(text string, storage *cmds.Storage, model string, parser func(string) error) error {
+func TwoStepJSONParser(text string, ctx *server.Context, model string, parser func(string) error) error {
 	err := ParseJSON(text, parser)
 	if err == nil {
 		return nil
 	}
 
-	return LLMJSONParser(text, storage, model, parser)
+	return LLMJSONParser(text, ctx, model, parser)
 }

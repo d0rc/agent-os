@@ -36,6 +36,35 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 	computeRouter := borrow_engine.NewInferenceEngine(borrow_engine.ComputeFunction{
 		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
 			lg.Warn().Msg("completion job received")
+			if len(jobs) == 0 {
+				return nil, nil
+			}
+			tasks := make([]*engines.JobQueueTask, len(jobs))
+			resChan := make([]chan *engines.Message, len(jobs))
+			for idx, job := range jobs {
+				resChan[idx] = make(chan *engines.Message, 1)
+				tasks[idx] = &engines.JobQueueTask{
+					Req: job.GenerationSettings,
+					Res: resChan[idx],
+				}
+			}
+
+			_, err := engines.RunCompletionRequest(n.RemoteEngine, tasks)
+			if err != nil {
+				lg.Error().Err(err).Msg("error running completion request")
+				return nil, err
+			}
+
+			for idx, job := range jobs {
+				failureTimeout := time.NewTimer(120 * time.Second)
+				select {
+				case <-failureTimeout.C:
+					lg.Error().Msg("completion request timed out")
+					return nil, err
+				case tmpResult := <-resChan[idx]:
+					job.ComputeResult.CompletionChannel <- tmpResult
+				}
+			}
 			return jobs, nil
 		},
 		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {

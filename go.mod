@@ -7,6 +7,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/blockloop/scan v1.3.0
 	github.com/dustin/go-humanize v1.0.1
+	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/gchaincl/dotsql v1.0.0
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/go-sql-driver/mysql v1.7.1

@@ -24,13 +24,11 @@
         search-queries:
           - search queries in the language you've chosen
       response-parsers:
-        - type: list
-          path: "search-queries"
+        - path: "search-queries"
           tags:
-            - "google-search-query"
-        - type: string
-          path: "thoughts"
+            - "search-queries"
+        - path: "thoughts"
           tags:
-            - "google-search-thoughts"
+            - "thoughts"
       life-cycle-type: single-shot
       life-cycle-length: 200

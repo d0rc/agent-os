@@ -3,7 +3,9 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/utils"
 	"github.com/logrusorgru/aurora"
 	zlog "github.com/rs/zerolog/log"
@@ -11,12 +13,12 @@ import (
 	"time"
 )
 
-func DocumentReduceGetCached(document, question string, storage *cmds.Storage) (string, bool) {
+func DocumentReduceGetCached(document, question string, ctx *server.Context) (string, bool) {
 	if len(document) == 0 {
 		return "", true
 	}
 
-	cachedResult, err := storage.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
+	cachedResult, err := ctx.Storage.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
 		document, question))
 	if err == nil && cachedResult != nil && len(cachedResult) > 10 {
 		return string(cachedResult), true
@@ -25,12 +27,12 @@ func DocumentReduceGetCached(document, question string, storage *cmds.Storage) (
 	return "", false
 }
 
-func DocumentReduce(document, question string, storage *cmds.Storage, parser func(string) error, model string) string {
+func DocumentReduce(document, question string, ctx *server.Context, parser func(string) error, model string) string {
 	if len(document) == 0 {
 		return ""
 	}
 
-	cachedResult, err := storage.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
+	cachedResult, err := ctx.Storage.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
 		document, question))
 	if err == nil && cachedResult != nil && len(cachedResult) > 10 {
 		return string(cachedResult)
@@ -39,7 +41,7 @@ func DocumentReduce(document, question string, storage *cmds.Storage, parser fun
 	ts := time.Now()
 	systemPrompt := fmt.Sprintf(`You are an AI that seeks to answer the following question:\n%s`, question)
 
-	snippets, err := tokenizeDocument(document, storage)
+	snippets, err := tokenizeDocument(document, ctx)
 	if err != nil {
 		return fmt.Sprintf("%v", err)
 	}
@@ -70,7 +72,7 @@ func DocumentReduce(document, question string, storage *cmds.Storage, parser fun
 				BestOf:      3,
 				MaxResults:  1,
 			},
-		}, storage)
+		}, ctx, "document-reduce", borrow_engine.PRIO_User)
 		minResults = 100 // next time we want all results, when making retry
 
 		if err != nil {
@@ -126,19 +128,19 @@ func DocumentReduce(document, question string, storage *cmds.Storage, parser fun
 		return ""
 	}
 
-	_ = storage.SaveTaskCacheResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
+	_ = ctx.Storage.SaveTaskCacheResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
 		document, question), []byte(currentSummary))
 
 	return currentSummary
 }
 
-func tokenizeDocument(document string, storage *cmds.Storage) ([]string, error) {
+func tokenizeDocument(document string, ctx *server.Context) ([]string, error) {
 	// idea is to split document into batch of tokens of max length
 	// max_snippet_size = (info.LLM.GetContextLength() * 2 / 3)
 	// use info.LLM.Tokenize(document) to tokenize it
 	tokenizerTs := time.Now()
 
-	result, err := storage.GetTaskCachedResult("gpt2-tokenizer", document)
+	result, err := ctx.Storage.GetTaskCachedResult("gpt2-tokenizer", document)
 	if err != nil && result != nil {
 		// ok, it's a hit...!
 		parsedResult := make([]string, 0)
@@ -168,7 +170,7 @@ func tokenizeDocument(document string, storage *cmds.Storage) ([]string, error) 
 
 	snippetsJSON, err := json.Marshal(snippets)
 	if err == nil {
-		_ = storage.SaveTaskCacheResult("gpt2-tokenizer", document, snippetsJSON)
+		_ = ctx.Storage.SaveTaskCacheResult("gpt2-tokenizer", document, snippetsJSON)
 	}
 
 	zlog.Info().
