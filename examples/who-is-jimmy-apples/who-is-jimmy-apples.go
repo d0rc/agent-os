@@ -42,9 +42,9 @@ func main() {
 	}
 	results, err := agency.GeneralAgentPipelineStep(agentState,
 		0,
-		3,
+		32,
 		100,
-		4,
+		40,
 		agentContext)
 
 	if err != nil {

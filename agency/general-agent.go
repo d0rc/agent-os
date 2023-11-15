@@ -180,7 +180,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		ProcessName:           state.SystemName,
 		Priority:              borrow_engine.PRIO_User,
 		GetCompletionRequests: jobs,
-	}, 120*time.Second)
+	}, 600*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("error getting completion: %v", err)
 	}

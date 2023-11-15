@@ -119,6 +119,26 @@ func (ie *InferenceEngine) Run() {
 			if !canSend {
 				continue
 			}
+			// check if we need to switch job types because other one has lower priorities
+			perBatchMinPrio := make(map[JobType]JobPriority)
+			minPrioJobType := JT_NotAJob
+			for jobType, jobs := range batch {
+				if len(jobs) == 0 {
+					perBatchMinPrio[jobType] = PRIO_Background
+					continue
+				}
+				minPriority := jobs[0].Priority
+				minPrioJobType = jobs[0].JobType
+				for _, job := range jobs {
+					if job.Priority < minPriority {
+						minPriority = job.Priority
+						minPrioJobType = job.JobType
+					}
+				}
+			}
+			if canSendJobType != minPrioJobType && minPrioJobType != JT_NotAJob {
+				canSendJobType = minPrioJobType
+			}
 
 			// let's check node can run this types of jobs
 			jobTypesSwitchedAlready := false
