@@ -21,11 +21,10 @@ import (
 */
 
 var nQueriesToShow = flag.Int("n", 10, "number of queries to show")
+var goal = flag.String("goal", "Figure out, who is Jimmy Apples.", "goal to achieve")
 
 //go:embed agency.yaml
 var agencyYaml []byte
-
-const goal = "Figure out, who is Jimmy Apples."
 
 var termUi = false
 
@@ -44,7 +43,7 @@ func main() {
 	client := os_client.NewAgentOSClient("http://localhost:9000")
 	agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
 	agentContext := &agency.InferenceContext{
-		InputVariables: map[string]any{"goal": goal},
+		InputVariables: map[string]any{"goal": *goal},
 		History:        make([][]*engines.Message, 0),
 	}
 	results, err := agency.GeneralAgentPipelineStep(agentState,
@@ -69,6 +68,9 @@ func main() {
 				if parsedResult.HasAnyTags("search-queries") {
 					listOfStrings := parsedResult.Value.([]interface{})
 					for _, v := range listOfStrings {
+						if v == nil {
+							continue
+						}
 						fmt.Printf("search query: %s\n", aurora.BrightYellow(v))
 						suggestedSearches[v.(string)]++
 					}

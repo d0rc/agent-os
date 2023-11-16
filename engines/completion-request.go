@@ -3,6 +3,7 @@ package engines
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	zlog "github.com/rs/zerolog/log"
 	"io"
 	"net/http"
@@ -106,8 +107,9 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	if resp.StatusCode != 200 {
+		err = fmt.Errorf("error sending request http code is %d", resp.StatusCode)
 		zlog.Error().Err(err).
-			Interface("batch", batch).
+			Interface("endpoint", inferenceEngine.EndpointUrl).
 			Msgf("error sending request http code is %d", resp.StatusCode)
 		return nil, err
 	}

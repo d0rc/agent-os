@@ -110,6 +110,10 @@ func (ie *InferenceEngine) Run() {
 						}
 					}
 				}
+
+				if haveAtLeastOneJobType != JT_NotAJob {
+					break
+				}
 			}
 
 			if haveAtLeastOneJobType != JT_NotAJob && time.Since(ie.Nodes[nodeIdx].LastIdleAt) > 50*time.Millisecond {
