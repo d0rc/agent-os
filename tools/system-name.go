@@ -9,8 +9,8 @@ func GetSystemName(name string) string {
 	resultingName := "agent-" + name
 	resultingName = strings.Replace(resultingName, " ", "-", -1)
 	resultingName = strings.ToLower(resultingName)
-	randomSuffix := randomString(4)
-	resultingName += "-" + randomSuffix
+	//randomSuffix := randomString(4)
+	//resultingName += "-" + randomSuffix
 
 	return resultingName
 }

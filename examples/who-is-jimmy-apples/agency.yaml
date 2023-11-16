@@ -28,5 +28,3 @@
         - path: "thoughts"
           tags:
             - "thoughts"
-      life-cycle-type: single-shot
-      life-cycle-length: 200

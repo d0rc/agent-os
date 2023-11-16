@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/d0rc/agent-os/tools"
 	"gopkg.in/yaml.v2"
+	"reflect"
 )
 
 type AgentSettings struct {
@@ -62,9 +63,31 @@ func ParseAgency(data []byte) ([]*AgentSettings, error) {
 }
 
 func (settings *AgentSettings) GetResponseJSONFormat() (string, error) {
+	fixMap(settings.Agent.PromptBased.ResponseFormat)
+	fixMap(settings.Agent.PromptBased.ResponseFormat)
 	res, err := json.MarshalIndent(settings.Agent.PromptBased.ResponseFormat, "", "\t")
 
 	return string(res), err
+}
+
+func fixMap(data map[string]interface{}) {
+	for k, v := range data {
+		switch v := v.(type) {
+		case map[interface{}]interface{}:
+			// Convert map[interface{}]interface{} to map[string]interface{}
+			convertedData := make(map[string]interface{})
+			for k, v := range v {
+				convertedData[k.(string)] = v
+			}
+			data[k] = convertedData
+		case map[string]interface{}:
+			// If the value is a map, recursively fix it
+			fixMap(v)
+		case reflect.Type:
+			// If the value is a reflect.Type, handle it appropriately
+			data[k] = v.String()
+		}
+	}
 }
 
 func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, error) {

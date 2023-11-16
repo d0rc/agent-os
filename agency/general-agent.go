@@ -199,8 +199,8 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		if len(history.History) == 0 {
 			history.History = append(history.History, make([]*engines.Message, 0))
 		}
-		if history.History[lastMessageLevel] == nil {
-			history.History[lastMessageLevel] = make([]*engines.Message, 0, len(jobResult.Choices))
+		if len(history.History) <= lastMessageLevel+1 {
+			history.History = append(history.History, make([]*engines.Message, 0))
 		}
 		for _, choice := range jobResult.Choices {
 			thisMessageId := uuid.NewHash(sha512.New(), uuid.Nil, []byte(choice), 5).String()
