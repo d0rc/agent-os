@@ -7,6 +7,7 @@ import (
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
+	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
 	"github.com/logrusorgru/aurora"
 	"sort"
@@ -64,6 +65,7 @@ func main() {
 			for _, parsedResult := range parsedResults {
 				if parsedResult.HasAnyTags("thoughts") {
 					fmt.Printf("thoughts: %s\n", aurora.BrightWhite(parsedResult.Value))
+					tools.RunLocalTTS(parsedResult.Value.(string))
 				}
 				if parsedResult.HasAnyTags("search-queries") {
 					listOfStrings := parsedResult.Value.([]interface{})

@@ -79,10 +79,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		return nil, fmt.Errorf("error executing agent's prompt: %v", err)
 	}
 	// result is a System message...!
-	responseFormat, err := state.Settings.GetResponseJSONFormat()
-	if err != nil {
-		return nil, fmt.Errorf("error getting response format: %v", err)
-	}
+	responseFormat := state.Settings.GetResponseJSONFormat()
 
 	contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
 	messageId := uuid.NewHash(sha512.New(), uuid.Nil, []byte(contextString), 5).String()

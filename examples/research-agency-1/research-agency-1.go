@@ -53,7 +53,7 @@ func main() {
 
 		for _, res := range results {
 			parsedResults, _ := agentState.ParseResponse(res.Content)
-			fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
+			//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 			for _, parsedResult := range parsedResults {
 				if parsedResult.HasAnyTags("thoughts") {
 					fmt.Printf("[%d] thoughts: %s\n", currentDepth, aurora.BrightWhite(parsedResult.Value))
