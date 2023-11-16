@@ -18,6 +18,36 @@ func NewAgentOSClient(url string) *AgentOSClient {
 	return &AgentOSClient{Url: url}
 }
 
+func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Duration) ([]*cmds.ServerResponse, error) {
+	type enumeratedResponse struct {
+		Idx  int
+		Resp *cmds.ServerResponse
+	}
+	responses := make([]chan *enumeratedResponse, len(reqs))
+	for idx, req := range reqs {
+		responses[idx] = make(chan *enumeratedResponse)
+		go func(req *cmds.ClientRequest, ch chan *enumeratedResponse, idx int) {
+			resp, err := c.RunRequest(req, timeout)
+			if err != nil {
+				fmt.Printf("error running request: %v\n", err)
+			}
+
+			ch <- &enumeratedResponse{
+				Idx:  idx,
+				Resp: resp,
+			}
+		}(req, responses[idx], idx)
+	}
+
+	finalResponses := make([]*cmds.ServerResponse, len(reqs))
+	for _, ch := range responses {
+		resp := <-ch
+		finalResponses[resp.Idx] = resp.Resp
+	}
+
+	return finalResponses, nil
+}
+
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration) (*cmds.ServerResponse, error) {
 	client := http.Client{Timeout: timeout}
 

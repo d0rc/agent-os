@@ -2,14 +2,11 @@ package main
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/agency"
-	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/utils"
-	"github.com/logrusorgru/aurora"
 	"time"
 )
 
@@ -45,7 +42,6 @@ func main() {
 			100,          // maxSamplingAttempts
 			4,            // minResults
 			agentContext)
-
 		if err != nil {
 			lg.Error().Err(err).
 				Interface("results", results).
@@ -53,56 +49,17 @@ func main() {
 			continue
 		}
 
-		clientRequests := make([]*cmds.ClientRequest, 0)
-		for _, res := range results {
-			parsedResults, _ := agentState.ParseResponse(res.Content)
-			//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
-			for _, parsedResult := range parsedResults {
-				if parsedResult.HasAnyTags("thoughts") {
-					fmt.Printf("[%d] thoughts: %s\n", currentDepth, aurora.BrightWhite(parsedResult.Value))
-				}
-				if parsedResult.HasAnyTags("command") {
-					v := parsedResult.Value
-					argsJson, _ := json.Marshal(v.(map[string]interface{})["args"])
-					fmt.Printf("[%d] command: %s, args: %v\n", currentDepth,
-						aurora.BrightYellow(v.(map[string]interface{})["name"]),
-						aurora.BrightWhite(string(argsJson)))
-					clientRequests = append(clientRequests,
-						getServerCommand(v.(map[string]interface{})["name"].(string), v.(map[string]interface{})["args"].(map[string]interface{})))
-				}
-			}
-		}
-
+		clientRequests := agency.TranslateToServerCalls(agentState, results)
 		if len(clientRequests) > 0 {
-			fmt.Printf("Sending %d client requests to server: %v\n", len(clientRequests), clientRequests)
+			res, err := client.RunRequests(clientRequests, 120*time.Second)
+			if err != nil {
+				lg.Error().Err(err).Msg("failed to send request")
+			}
+			fmt.Printf("Got responses: %v\n", res)
 		}
 
 		currentDepth++
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(ts))
-}
-
-func getServerCommand(commandName string, args map[string]interface{}) *cmds.ClientRequest {
-	clientRequest := &cmds.ClientRequest{
-		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
-	}
-	switch commandName {
-	case "bing-search":
-		keywords := args["keywords"]
-		switch keywords.(type) {
-		case string:
-			clientRequest.GoogleSearchRequests = append(clientRequest.GoogleSearchRequests, cmds.GoogleSearchRequest{
-				Keywords: keywords.(string),
-			})
-		case []interface{}:
-			for _, keyword := range keywords.([]interface{}) {
-				clientRequest.GoogleSearchRequests = append(clientRequest.GoogleSearchRequests, cmds.GoogleSearchRequest{
-					Keywords: keyword.(string),
-				})
-			}
-		}
-	}
-
-	return clientRequest
 }
