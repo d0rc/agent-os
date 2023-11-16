@@ -25,6 +25,7 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 	uiEvents := ui.PollEvents()
 	lastLogLines := make([]string, 0, 100)
 	//rounds := 0
+	selectedComputeNode := 0
 	for {
 		//rounds++
 		topInfo := ie.buildTopString(jobsBuffer, lock, true)
@@ -39,6 +40,11 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 		computeTable.FillRow = true
 		computeTable.RowStyles[0] = ui.NewStyle(ui.ColorWhite, ui.ColorBlack, ui.ModifierBold)
 		computeTable.TextAlignment = ui.AlignCenter
+		computeTable.RowStyles[selectedComputeNode] = ui.Style{
+			Fg:       ui.ColorYellow,
+			Bg:       ui.ColorBlue,
+			Modifier: ui.ModifierUnderline,
+		}
 
 		processesTable := widgets.NewTable()
 		processesTable.Title = "[ Processes ]"
@@ -94,8 +100,26 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 				x2, y2 = e.Payload.(ui.Resize).Width, e.Payload.(ui.Resize).Height
 			}
 			switch e.ID {
+			case "<Up>":
+				// move cursor up
+				if selectedComputeNode > 0 {
+					selectedComputeNode--
+				}
+			case "<Down>":
+				// move cursor down
+				if selectedComputeNode < len(topInfo.computeEngines)-1 {
+					selectedComputeNode++
+				}
+			case "e":
+				// disable embeddings processing on current node
+				if selectedComputeNode > 0 && selectedComputeNode <= len(ie.Nodes) {
+					if len(ie.Nodes[selectedComputeNode-1].JobTypes) == 1 {
+						ie.Nodes[selectedComputeNode-1].JobTypes = []JobType{JT_Completion, JT_Embeddings}
+					} else {
+						ie.Nodes[selectedComputeNode-1].JobTypes = []JobType{JT_Completion}
+					}
+				}
 			case "q", "<C-c>":
-
 				return
 			}
 		}
