@@ -1,61 +1,52 @@
 # Developing with AgencyOS
 
-`agency.yaml` - is a YAML definition of the agency, which is a list agents, each of which is whatever you'd like, but I think it's computational procedure, which is described using:
+`agency.yaml` is a YAML file that defines the agency. The agency is comprised of a list of agents, and each agent can be any computational procedure you choose. The definition includes:
 
-- Initial prompt;
-- Initial context (map of variables which are passed to templating engine with initial prompt);
-- Response format.
+- An initial prompt;
+- An initial context, which is a map of variables passed to the templating engine along with the initial prompt;
+- A response format.
 
-Now, if you run this:
+When you execute the following command:
 
 ```bash
 go run ./examples/who-is-jimmy-apples/who-is-jimmy-apples.go -n 12
 ```
 
-You will see something like this:
+You'll receive output similar to this:
 
 ```javascript
-
---- many many lines here ---
+--- many lines of output ---
 
 End of the list of the most suggested search queries:
 65. Background of Jimmy Apples - 160
-66. Jimmy Apples controversies - 160
-67. Jimmy Apples education - 192
-68. Jimmy Apples social media profiles - 288
-69. Jimmy Apples personal life - 288
-70. Jimmy Apples background - 480
-71. Jimmy Apples bio - 544
-72. Jimmy Apples biography - 576
-73. Jimmy Apples achievements - 576
-74. Jimmy Apples net worth - 800
-75. Jimmy Apples career - 800
+...
 76. Who is Jimmy Apples? - 832
 Done - total results: 1312
 Execution finished in  1.512428667s
 ```
 
-Which is top 12 search queries, proposed by the agent from the description for the goal, defined in binary.
+This output represents the top 12 search queries suggested by the agent based on the description for the goal, as defined in binary.
 
-You may notice the first run is slow and consequent runs are fast, that is because extensive caching applied for results of all compute or IO-heavy actions. No result is ever lost, unless you want to, if you still want to get some more inferences on each run, you can request a different number of results from the system and it will generate new ones, while still serving the old ones.
+You may notice that the first execution is slower, but subsequent runs are quicker due to extensive caching of results from compute or IO-intensive actions. The system retains all results unless deliberately discarded. To obtain additional inferences in each run, you can request a different number of results, and the system will generate new ones while still serving the old.
 
-## running inference
+## Running Inference
 
+The following Golang code snippet illustrates how to run inference:
 
 ```golang
 	results, err := agency.GeneralAgentPipelineStep(agentState,
 		0,   // current depth of history, 0 - means only system prompt
-    32,  // try to create this many inference jobs
-		100, // how many times we can try to sample `batchSize` jobs
-		40,  // how many inference results before using only cached inference
+    32,  // number of inference jobs to create
+		100, // max attempts to sample `batchSize` jobs
+		40,  // number of inference results before using only cached inference
 		agentContext)
 ```
 
-The whole point is to allow underlying engine "explore" as many possible paths as it can, which in turn is beneficial in many senses, to name a few - production setting, when solution has to be found, fine-tuning data set preparations, internal stability benchmarks, etc. 
+The objective is to enable the underlying engine to explore as many paths as possible. This approach is beneficial in several contexts, including production environments where solutions must be found, preparation of fine-tuning datasets, and internal stability benchmarks.
 
-## parsing responses
+## Parsing Responses
 
-The code explains it better, this what is done to results from the previous chapter in the example code:
+The example code below shows how to process the results obtained in the previous step:
 
 ```golang
 suggestedSearches := make(map[string]int)
@@ -63,13 +54,13 @@ for _, res := range results {
     parsedResults, _ := agentState.ParseResponse(res.Content)
     for _, parsedResult := range parsedResults {
        if parsedResult.HasAnyTags("thoughts") {
-          // let's print thoughts for fun and debug...!
+          // Outputting thoughts for fun and debugging...
           fmt.Printf("thoughts: %s\n", aurora.BrightWhite(parsedResult.Value))
        }
        if parsedResult.HasAnyTags("search-queries") {
           listOfStrings := parsedResult.Value.([]interface{})
           for _, v := range listOfStrings {
-             // notify user about new search query parsed...!
+             // Informing user about new search query parsed...
              fmt.Printf("search query: %s\n", aurora.BrightYellow(v))
              suggestedSearches[v.(string)]++
           }
@@ -78,3 +69,4 @@ for _, res := range results {
 }
 ```
 
+This code processes the results, counting suggested search queries.
