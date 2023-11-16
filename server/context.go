@@ -59,7 +59,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 
 			_, err := engines.RunCompletionRequest(n.RemoteEngine, tasks)
 			if err != nil {
-				lg.Error().Err(err).Msg("error running completion request")
+				lg.Error().Err(err).Msgf("error running completion request: %v", err)
 				return nil, err
 			}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"math/rand"
 	"strings"
 	"time"
@@ -101,14 +102,9 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 	// marked as a reply to message on previous level, and if we're on the level 0, we can pick
 	// any message -- that's it
 	// let's start sampling!
+	var attemptFailed = false
 	samplingAttempts := 0
 	for {
-		if currentDepth == 0 || len(history.History) == 0 {
-			// it's just a system message, nothing to sample, just break
-			// whatever they want - it's impossible
-			break
-		}
-
 		samplingAttempts++
 		if samplingAttempts > maxSamplingAttempts {
 			// we can't do it anymore
@@ -120,39 +116,32 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		}
 		currentSample := make([]*engines.Message, 0, currentDepth)
 		// first message in any thread is a system one
-		currentSample[0] = systemMessage
+		currentSample = append(currentSample, systemMessage)
 		// now we need to collect currentDepth messages from history
 		// respecting messages inter-connection rules
+		var lastAddedMessageID *string = nil
 		for currentLevel := 0; currentLevel < currentDepth; currentLevel++ {
+			options := make([]*engines.Message, 0)
 
-		}
-
-		// let's pick a random message from history
-		randomMessage := history.History[0][randomInt(len(history.History))]
-		currentSample = append(currentSample, randomMessage)
-
-		attemptFailed := false
-		if currentDepth > 0 {
-			for i := 1; i < currentDepth; i++ {
-				// what was the message on previous level
-				previousMessageId := currentSample[i-1].ID
-				// let's find all messages on current level, which are replies to previous message
-				options := make([]*engines.Message, 0, len(history.History[i]))
-				for _, message := range history.History[i] {
-					if message.ReplyTo == previousMessageId {
-						options = append(options, message)
-					}
+			for _, msg := range history.History[currentLevel] {
+				if lastAddedMessageID == nil {
+					options = append(options, msg)
+				} else if msg.ReplyTo != nil && *lastAddedMessageID == *msg.ReplyTo {
+					options = append(options, msg)
+				} else {
+					log.Debug().Msgf("message %s is not a reply to %v - %v", msg.ID, lastAddedMessageID)
 				}
-				if len(options) == 0 {
-					// we can't do it anymore
-					attemptFailed = true
-					break
-				}
-
-				// pick a random message from options
-				currentSample = append(currentSample, options[randomInt(len(options))])
 			}
+
+			// let's pick a random message from options
+			if len(options) == 0 {
+				attemptFailed = true
+				break
+			}
+			messageToAdd := options[randomInt(len(options))]
+			currentSample = append(currentSample, messageToAdd)
 		}
+		// here we should have our currentSample ready
 
 		if attemptFailed {
 			continue
@@ -171,19 +160,6 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		}
 		jobsSelectedMessageId = append(jobsSelectedMessageId, *currentSample[len(currentSample)-1].ID)
 		jobsSelectedMessageLevel = append(jobsSelectedMessageLevel, len(currentSample)-1)
-	}
-
-	if len(jobs) == 0 {
-		// it's just a system message, make batchSize of them
-		for i := 0; i < batchSize; i++ {
-			jobs = append(jobs, cmds.GetCompletionRequest{
-				RawPrompt:   chatToRawPrompt([]*engines.Message{systemMessage}),
-				MinResults:  minResults,
-				Temperature: 0.8,
-			})
-			jobsSelectedMessageId = append(jobsSelectedMessageId, *systemMessage.ID)
-			jobsSelectedMessageLevel = append(jobsSelectedMessageLevel, 0)
-		}
 	}
 
 	// start inference

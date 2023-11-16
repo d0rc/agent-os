@@ -53,13 +53,14 @@ func main() {
 
 		for _, res := range results {
 			parsedResults, _ := agentState.ParseResponse(res.Content)
+			fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 			for _, parsedResult := range parsedResults {
 				if parsedResult.HasAnyTags("thoughts") {
 					fmt.Printf("[%d] thoughts: %s\n", currentDepth, aurora.BrightWhite(parsedResult.Value))
 				}
-				if parsedResult.HasAnyTags("bing-search") {
+				if parsedResult.HasAnyTags("command") {
 					v := parsedResult.Value
-					fmt.Printf("[%d] bing-search: %v\n", currentDepth, aurora.BrightYellow(v))
+					fmt.Printf("[%d] command: %v\n", currentDepth, aurora.BrightYellow(v))
 				}
 			}
 		}

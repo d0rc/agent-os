@@ -37,12 +37,10 @@
         thoughts: thought text, which provides critics of possible solutions
         criticism: constructive self-criticism, question your assumptions
         action: action description, which should clearly state the task
-        command-name:
-          arg1: "arg1 value"
+        command:
+          name: name of the command from the list above
+          args: {}
       response-parsers:
-        - path: "bing-search"
-          tags:
-            - "bing-search"
         - path: "command"
           tags:
             - "command"
