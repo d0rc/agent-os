@@ -1,6 +1,6 @@
 # Developing with AgencyOS
 
-`agency.yaml` is a YAML file that defines the agency. The agency is comprised of a list of agents, and each agent can be any computational procedure you choose. The definition includes:
+`agency.yaml` is a YAML file that defines the agency, the file is just loaded during example start-up. The agency is comprised of a list of agents, and each agent can be any computational procedure you choose. The definition includes:
 
 - An initial prompt;
 - An initial context, which is a map of variables passed to the templating engine along with the initial prompt;
