@@ -24,7 +24,7 @@ Done - total results: 1312
 ```
 
 
-When running multiple times, consequent results will the same, as long as you keep the settings:
+When running multiple times, consequent results will be the same, as long as you keep the settings, and will run from cache - no more inference requests to GPUs at all, but you can debug your processing pipeline on many examples:
 
 
 ```golang
