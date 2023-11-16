@@ -95,6 +95,7 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 			}
 			switch e.ID {
 			case "q", "<C-c>":
+
 				return
 			}
 		}

@@ -2,6 +2,7 @@ package borrow_engine
 
 import (
 	"github.com/rs/zerolog/log"
+	"os"
 	"sync"
 	"time"
 )
@@ -16,9 +17,14 @@ func (ie *InferenceEngine) Run() {
 	jobsBufferLock := sync.RWMutex{}
 
 	go func() {
-		for {
-			ie.PrintTop(jobsBuffer, &jobsBufferLock)
-			time.Sleep(ie.settings.TopInterval)
+		if ie.settings.TermUI {
+			ie.ui(jobsBuffer, &jobsBufferLock)
+			os.Exit(0)
+		} else {
+			for {
+				ie.PrintTop(jobsBuffer, &jobsBufferLock)
+				time.Sleep(ie.settings.TopInterval)
+			}
 		}
 	}()
 

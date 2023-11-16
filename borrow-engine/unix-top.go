@@ -19,8 +19,6 @@ func (ie *InferenceEngine) PrintTop(jobsBuffer map[JobPriority][]*ComputeJob, lo
 		topInfo := ie.buildTopString(jobsBuffer, lock, false)
 
 		fmt.Printf("%s", topInfo.topString)
-	} else {
-		ie.ui(jobsBuffer, lock)
 	}
 }
 
