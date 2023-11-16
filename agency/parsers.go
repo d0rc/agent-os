@@ -38,6 +38,18 @@ type ResponseParserResult struct {
 	Parser *ResponseParser
 }
 
+func (rpr *ResponseParserResult) HasAnyTags(v ...string) bool {
+	for _, tag := range v {
+		for _, t := range rpr.Tags {
+			if t == tag {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func ParseAgency(data []byte) ([]*AgentSettings, error) {
 	var settings []*AgentSettings
 
@@ -55,10 +67,10 @@ func (settings *AgentSettings) GetResponseJSONFormat() (string, error) {
 	return string(res), err
 }
 
-func (settings *AgentSettings) ParseResponse(response []byte) ([]*ResponseParserResult, error) {
+func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, error) {
 	// step one is parse JSON itself, according to the schema
 	var parsedResponse ResponseFormatType
-	err := tools.ParseJSON(string(response), func(response string) error {
+	err := tools.ParseJSON(response, func(response string) error {
 		return json.Unmarshal([]byte(response), &parsedResponse)
 	})
 	if err != nil {

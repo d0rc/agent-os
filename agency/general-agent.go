@@ -21,6 +21,10 @@ type GeneralAgentInfo struct {
 	Server     *os_client.AgentOSClient
 }
 
+func (agent *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, error) {
+	return agent.Settings.ParseResponse(response)
+}
+
 type InferenceContext struct {
 	InputVariables map[string]any
 	History        [][]*engines.Message
