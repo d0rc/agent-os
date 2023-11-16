@@ -34,11 +34,17 @@ You may notice that the first execution is slower, but subsequent runs are quick
 The following Golang code snippet illustrates how to run inference:
 
 ```golang
-	results, err := agency.GeneralAgentPipelineStep(agentState,
+client := os_client.NewAgentOSClient("http://localhost:9000")
+agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
+agentContext := &agency.InferenceContext{
+		InputVariables: map[string]any{"goal": goal},
+		History:        make([][]*engines.Message, 0),
+}
+results, err := agency.GeneralAgentPipelineStep(agentState,
 		0,   // current depth of history, 0 - means only system prompt
-    32,  // number of inference jobs to create
-		100, // max attempts to sample `batchSize` jobs
-		40,  // number of inference results before using only cached inference
+		32,  // try to create this many compute jobs
+		100, // how many times we can try to sample `batchSize` jobs
+		40,  // how many inference results before using only cached
 		agentContext)
 ```
 
