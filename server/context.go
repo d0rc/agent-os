@@ -1,12 +1,15 @@
 package server
 
 import (
+	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/settings"
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/vectors"
+	"github.com/logrusorgru/aurora"
 	"github.com/rs/zerolog"
+	"os"
 	"time"
 )
 
@@ -32,6 +35,11 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 	}
 
 	db, err := storage.NewStorage(lg)
+	if err != nil {
+		fmt.Printf("error creating storage: %v\n", aurora.BrightRed(err))
+		fmt.Printf("confgiration file used: %s\n", configPath)
+		os.Exit(1)
+	}
 
 	computeRouter := borrow_engine.NewInferenceEngine(borrow_engine.ComputeFunction{
 		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {

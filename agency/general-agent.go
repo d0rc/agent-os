@@ -119,6 +119,13 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 			break
 		}
 		currentSample := make([]*engines.Message, 0, currentDepth)
+		// first message in any thread is a system one
+		currentSample[0] = systemMessage
+		// now we need to collect currentDepth messages from history
+		// respecting messages inter-connection rules
+		for currentLevel := 0; currentLevel < currentDepth; currentLevel++ {
+
+		}
 
 		// let's pick a random message from history
 		randomMessage := history.History[0][randomInt(len(history.History))]
