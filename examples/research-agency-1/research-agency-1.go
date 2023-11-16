@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/engines"
@@ -19,7 +20,7 @@ var termUi = false
 func main() {
 	ts := time.Now()
 	lg, _ := utils.ConsoleInit("", &termUi)
-	lg.Info().Msg("starting who-is-jimmy-apples")
+	lg.Info().Msg("starting research-agency-1")
 
 	agencySettings, err := agency.ParseAgency(agencyYaml)
 	if err != nil {
@@ -60,7 +61,10 @@ func main() {
 				}
 				if parsedResult.HasAnyTags("command") {
 					v := parsedResult.Value
-					fmt.Printf("[%d] command: %v\n", currentDepth, aurora.BrightYellow(v))
+					argsJson, _ := json.Marshal(v.(map[string]interface{})["args"])
+					fmt.Printf("[%d] command: %s, args: %v\n", currentDepth,
+						aurora.BrightYellow(v.(map[string]interface{})["name"]),
+						aurora.BrightWhite(string(argsJson)))
 				}
 			}
 		}
