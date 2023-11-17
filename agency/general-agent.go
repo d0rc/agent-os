@@ -82,7 +82,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 	responseFormat := state.Settings.GetResponseJSONFormat()
 
 	contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
-	messageId := uuid.NewHash(sha512.New(), uuid.Nil, []byte(contextString), 5).String()
+	messageId := GenerateMessageId(contextString)
 	systemMessage := &engines.Message{
 		Role:    engines.ChatRoleSystem,
 		Content: contextString,
@@ -152,7 +152,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		})
 		if currentSample[len(currentSample)-1].ID == nil {
 			// make an id for this message
-			prevMessageId := uuid.NewHash(sha512.New(), uuid.Nil, []byte(currentSample[len(currentSample)-1].Content), 5).String()
+			prevMessageId := GenerateMessageId(currentSample[len(currentSample)-1].Content)
 			currentSample[len(currentSample)-1].ID = &prevMessageId
 		}
 		jobsSelectedMessageId = append(jobsSelectedMessageId, *currentSample[len(currentSample)-1].ID)
@@ -183,7 +183,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 			history.History = append(history.History, make([]*engines.Message, 0))
 		}
 		for _, choice := range jobResult.Choices {
-			thisMessageId := uuid.NewHash(sha512.New(), uuid.Nil, []byte(choice), 5).String()
+			thisMessageId := GenerateMessageId(choice)
 			resultMessage := &engines.Message{
 				ID:      &thisMessageId,
 				Content: choice,
@@ -197,6 +197,10 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 	}
 
 	return resultMessages, nil
+}
+
+func GenerateMessageId(body string) string {
+	return uuid.NewHash(sha512.New(), uuid.Nil, []byte(body), 5).String()
 }
 
 func chatToRawPrompt(sample []*engines.Message) string {
