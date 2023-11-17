@@ -7,7 +7,22 @@ import (
 	"net/http"
 )
 
+var ttsQueue = make(chan string, 100)
+
+func init() {
+	go func() {
+		for {
+			text := <-ttsQueue
+			runLocalTTS(text)
+		}
+	}()
+}
+
 func RunLocalTTS(text string) {
+	ttsQueue <- text
+}
+
+func runLocalTTS(text string) {
 	type ttsRequest struct {
 		Text string `json:"text"`
 	}

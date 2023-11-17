@@ -77,22 +77,30 @@ func main() {
 }
 
 func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.ServerResponse, error) {
+	var result *cmds.ServerResponse
+	var err error
 	if request.GetPageRequests != nil {
 		// got some page requests...!
-		return cmds.ProcessPageRequests(request.GetPageRequests, ctx)
+		result, err = cmds.ProcessPageRequests(request.GetPageRequests, ctx)
 	}
 
 	if request.GoogleSearchRequests != nil {
-		return cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
+		result, err = cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
 	}
 
 	if request.GetCompletionRequests != nil {
-		return cmds.ProcessGetCompletions(request.GetCompletionRequests, ctx, request.ProcessName, request.Priority)
+		result, err = cmds.ProcessGetCompletions(request.GetCompletionRequests, ctx, request.ProcessName, request.Priority)
 	}
 
 	if request.GetEmbeddingsRequests != nil {
-		return cmds.ProcessGetEmbeddings(request.GetEmbeddingsRequests, ctx, request.ProcessName, request.Priority)
+		result, err = cmds.ProcessGetEmbeddings(request.GetEmbeddingsRequests, ctx, request.ProcessName, request.Priority)
 	}
 
-	return nil, nil
+	if err != nil {
+		return nil, err
+	}
+
+	result.CorrelationId = request.CorrelationId
+
+	return result, nil
 }

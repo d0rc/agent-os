@@ -10,25 +10,22 @@ import (
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/google/uuid"
-	"github.com/rs/zerolog/log"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 )
 
 type GeneralAgentInfo struct {
-	SystemName string
-	Settings   *AgentSettings
-	Server     *os_client.AgentOSClient
+	SystemName     string
+	Settings       *AgentSettings
+	Server         *os_client.AgentOSClient
+	InputVariables map[string]any
+	History        []*engines.Message // no need to keep track of turn numbers - only replyTo is important
 }
 
 func (agent *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, error) {
 	return agent.Settings.ParseResponse(response)
-}
-
-type InferenceContext struct {
-	InputVariables map[string]any
-	History        [][]*engines.Message
 }
 
 func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, config *AgentSettings) *GeneralAgentInfo {
@@ -36,9 +33,11 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		systemName = tools.GetSystemName(config.Agent.Name)
 	}
 	return &GeneralAgentInfo{
-		SystemName: systemName,
-		Settings:   config,
-		Server:     client,
+		SystemName:     systemName,
+		Settings:       config,
+		Server:         client,
+		InputVariables: map[string]any{},
+		History:        make([]*engines.Message, 0),
 	}
 }
 
@@ -57,29 +56,29 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 // an observation pipeline:
 //   - append observation and toggle next inference
 //   - retry current generation if limit of success runs is not reached
-func GeneralAgentPipelineStep(state *GeneralAgentInfo,
+func GeneralAgentPipelineStep(agentState *GeneralAgentInfo,
 	currentDepth, // current depth of history, 0 - means only system prompt
 	batchSize, // try to create this many jobs
 	maxSamplingAttempts, // how many times we can try to sample `batchSize` jobs
 	minResults int, // how many inference results before using only cached inference
-	history *InferenceContext) ([]*engines.Message, error) {
+) ([]*engines.Message, error) {
 	// let's get context right
-	if state.Settings == nil || state.Settings.Agent == nil || state.Settings.Agent.PromptBased == nil ||
-		state.Settings.Agent.PromptBased.Prompt == "" {
+	if agentState.Settings == nil || agentState.Settings.Agent == nil || agentState.Settings.Agent.PromptBased == nil ||
+		agentState.Settings.Agent.PromptBased.Prompt == "" {
 		return nil, fmt.Errorf("not a pormpt-based agent - empty prompt in agent settings")
 	}
 
-	tpl, err := pongo2.FromString(state.Settings.Agent.PromptBased.Prompt)
+	tpl, err := pongo2.FromString(agentState.Settings.Agent.PromptBased.Prompt)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing agent's prompt: %v", err)
 	}
 
-	contextString, err := tpl.Execute(history.InputVariables)
+	contextString, err := tpl.Execute(agentState.InputVariables)
 	if err != nil {
 		return nil, fmt.Errorf("error executing agent's prompt: %v", err)
 	}
 	// result is a System message...!
-	responseFormat := state.Settings.GetResponseJSONFormat()
+	responseFormat := agentState.Settings.GetResponseJSONFormat()
 
 	contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
 	messageId := GenerateMessageId(contextString)
@@ -89,79 +88,78 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 		ID:      &messageId,
 	}
 
-	// now let's create a required batch of chat requests on our current level of history
+	// ok, now, we always start with system message
+	chats := make([][]*engines.Message, 0, batchSize)
 	jobs := make([]cmds.GetCompletionRequest, 0, batchSize)
-	jobsSelectedMessageId := make([]string, 0, batchSize)
-	jobsSelectedMessageLevel := make([]int, 0, batchSize)
-	// sample batchSize histories from current history, up to the current depth
-	// the thing is each message, except for #0 is something which was replied a level deeper
-	// so, we can choose a random thread of messages, picking on current level those, which are
-	// marked as a reply to message on previous level, and if we're on the level 0, we can pick
-	// any message -- that's it
-	// let's start sampling!
-	var attemptFailed = false
-	samplingAttempts := 0
+	samplingAttempt := 0
 	for {
-		samplingAttempts++
-		if samplingAttempts > maxSamplingAttempts {
-			// we can't do it anymore
+		samplingAttempt++
+		if samplingAttempt > maxSamplingAttempts {
 			break
 		}
 		if len(jobs) >= batchSize {
-			// we're done
 			break
 		}
-		currentSample := make([]*engines.Message, 0, currentDepth)
-		// first message in any thread is a system one
-		currentSample = append(currentSample, systemMessage)
-		// now we need to collect currentDepth messages from history
-		// respecting messages inter-connection rules
-		var lastAddedMessageID *string = nil
-		for currentLevel := 0; currentLevel < currentDepth; currentLevel++ {
+		chat := make([]*engines.Message, 0)
+		chat = append(chat, systemMessage)
+		for {
 			options := make([]*engines.Message, 0)
-
-			for _, msg := range history.History[currentLevel] {
-				if lastAddedMessageID == nil {
+			for _, msg := range agentState.History {
+				if *msg.ReplyTo == *chat[len(chat)-1].ID {
 					options = append(options, msg)
-				} else if msg.ReplyTo != nil && *lastAddedMessageID == *msg.ReplyTo {
-					options = append(options, msg)
-				} else {
-					log.Debug().Msgf("message %s is not a reply to %v - %v", msg.ID, lastAddedMessageID)
 				}
 			}
-
-			// let's pick a random message from options
+			// ok, now we have len(options) messages to choose from
 			if len(options) == 0 {
-				attemptFailed = true
+				// it's the end of the thread, continue to the next one
 				break
 			}
+			// pick a random message from options
 			messageToAdd := options[randomInt(len(options))]
-			currentSample = append(currentSample, messageToAdd)
+			chat = append(chat, messageToAdd)
 		}
-		// here we should have our currentSample ready
 
-		if attemptFailed {
+		if chat == nil || len(chat) == 0 {
 			continue
 		}
+		if chat[len(chat)-1].Role != engines.ChatRoleAssistant {
+			chats = append(chats, chat)
+		}
+	}
 
-		// we've got a sample, let's make a request
+	// now pick the top maxBatchSize chats
+	// so sort chats by the lebgth
+	// and pick the top batchSize
+	sort.Slice(chats, func(i, j int) bool {
+		return len(chats[i]) > len(chats[j])
+	})
+	if len(chats) > batchSize {
+		chats = chats[:batchSize]
+	}
+
+	for _, chat := range chats {
 		jobs = append(jobs, cmds.GetCompletionRequest{
-			RawPrompt:   chatToRawPrompt(currentSample),
+			RawPrompt:   chatToRawPrompt(chat),
 			MinResults:  minResults,
 			Temperature: 0.8,
 		})
-		if currentSample[len(currentSample)-1].ID == nil {
-			// make an id for this message
-			prevMessageId := GenerateMessageId(currentSample[len(currentSample)-1].Content)
-			currentSample[len(currentSample)-1].ID = &prevMessageId
-		}
-		jobsSelectedMessageId = append(jobsSelectedMessageId, *currentSample[len(currentSample)-1].ID)
-		jobsSelectedMessageLevel = append(jobsSelectedMessageLevel, len(currentSample)-1)
 	}
 
 	// start inference
-	serverResponse, err := state.Server.RunRequest(&cmds.ClientRequest{
-		ProcessName:           state.SystemName,
+	// min length of chats, max length of chats
+	minLen := len(chats[0])
+	maxLen := len(chats[0])
+	for _, chat := range chats {
+		if len(chat) < minLen {
+			minLen = len(chat)
+		}
+		if len(chat) > maxLen {
+			maxLen = len(chat)
+		}
+	}
+	fmt.Printf("Running inference for %d chats, min len: %d, max len: %d\n", len(chats), minLen, maxLen)
+	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
+		ProcessName:           agentState.SystemName,
 		Priority:              borrow_engine.PRIO_User,
 		GetCompletionRequests: jobs,
 	}, 600*time.Second)
@@ -174,14 +172,8 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 	resultMessages := make([]*engines.Message, 0, len(serverResponse.GetCompletionResponse))
 	for jobResultIdx, jobResult := range serverResponse.GetCompletionResponse {
 		// what was the last message in jobs[jobResultIdx]
-		lastMessageId := jobsSelectedMessageId[jobResultIdx]
-		lastMessageLevel := jobsSelectedMessageLevel[jobResultIdx]
-		if len(history.History) == 0 {
-			history.History = append(history.History, make([]*engines.Message, 0))
-		}
-		if len(history.History) <= lastMessageLevel+1 {
-			history.History = append(history.History, make([]*engines.Message, 0))
-		}
+		lastMessageId := *chats[jobResultIdx][len(chats[jobResultIdx])-1].ID
+
 		for _, choice := range jobResult.Choices {
 			thisMessageId := GenerateMessageId(choice)
 			resultMessage := &engines.Message{
@@ -190,7 +182,7 @@ func GeneralAgentPipelineStep(state *GeneralAgentInfo,
 				ReplyTo: &lastMessageId,
 				Role:    engines.ChatRoleAssistant,
 			}
-			history.History[lastMessageLevel] = append(history.History[lastMessageLevel], resultMessage)
+			agentState.History = append(agentState.History, resultMessage)
 			resultMessages = append(resultMessages, resultMessage)
 			// at this point it's clear what to parse and where to put the response / observation, etc
 		}
