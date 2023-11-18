@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -32,6 +33,7 @@ type GeneralAgentInfo struct {
 	//ioProcessingChannel      chan *cmds.ClientRequest
 	historyAppenderChannel chan *engines.Message
 	quitHistoryAppeneder   chan struct{}
+	historySize            int32
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, error) {
@@ -76,6 +78,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 			return
 		case message := <-agentState.historyAppenderChannel:
 			agentState.History = append(agentState.History, message)
+			atomic.AddInt32(&agentState.historySize, 1)
 		}
 	}
 }
@@ -317,11 +320,19 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 
 		fmt.Printf("Running inference for %d chats, min len: %d, max len: %d\n", len(chats), minLen, maxLen)
 		// now we have jobs, let's run them
+		originalHistorySize := atomic.LoadInt32(&agentState.historySize)
 		for _, job := range jobs {
 			agentState.jobsChannel <- &job
 		}
 
-		time.Sleep(1 * time.Second)
+		// no we have to wait until we've got at least len(jobs) new history messages
+		for {
+			historySize := atomic.LoadInt32(&agentState.historySize)
+			if historySize >= originalHistorySize+int32(len(jobs)) {
+				break
+			}
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	return nil

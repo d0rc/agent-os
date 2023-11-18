@@ -8,6 +8,7 @@ import (
 	"github.com/d0rc/agent-os/tools"
 	"github.com/logrusorgru/aurora"
 	"os"
+	"sync"
 )
 
 func (agentState *GeneralAgentInfo) TranslateToServerCalls(results []*engines.Message) []*cmds.ClientRequest {
@@ -42,6 +43,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCalls(results []*engines.Me
 	return clientRequests
 }
 
+var notesLock = sync.RWMutex{}
 var notes = make(map[string][]string)
 
 func getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
@@ -73,6 +75,7 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		}
 		sectionString := section.(string)
 
+		notesLock.Lock()
 		notes[sectionString] = make([]string, 0)
 		switch text.(type) {
 		case string:
@@ -81,9 +84,12 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 			jsonText, _ := json.Marshal(text)
 			notes[sectionString] = append(notes[sectionString], string(jsonText))
 		}
+		notesLock.Unlock()
 		clientRequest.SpecialCaseResponse = "Ok, note saved."
 
+		notesLock.RLock()
 		allNotesJson, err := json.Marshal(notes)
+		notesLock.RUnlock()
 		if err == nil {
 			_ = os.WriteFile("/tmp/ai-notes.json", allNotesJson, 0644)
 		}
@@ -92,7 +98,9 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		if section == nil {
 			clientRequest.SpecialCaseResponse = "No section specified."
 		} else {
+			notesLock.RLock()
 			texts, found := notes[section.(string)]
+			notesLock.RUnlock()
 			if found {
 				clientRequest.SpecialCaseResponse = texts[len(texts)-1]
 			} else {
@@ -101,9 +109,11 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		}
 	case "list-notes":
 		clientRequest.SpecialCaseResponse = "Notes:\n"
+		notesLock.RLock()
 		for section, text := range notes {
 			clientRequest.SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
 		}
+		notesLock.RUnlock()
 	case "speak":
 		question := args["text"]
 		switch question.(type) {
