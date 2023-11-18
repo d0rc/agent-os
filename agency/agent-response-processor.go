@@ -7,22 +7,23 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/logrusorgru/aurora"
+	"os"
 )
 
-func TranslateToServerCalls(depth int, agentState *GeneralAgentInfo, results []*engines.Message) []*cmds.ClientRequest {
+func (agentState *GeneralAgentInfo) TranslateToServerCalls(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for _, res := range results {
 		parsedResults, _ := agentState.ParseResponse(res.Content)
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {
-				fmt.Printf("[%d] thoughts: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
-				tools.RunLocalTTS("Current thoughts: " + parsedResult.Value.(string))
+				fmt.Printf("thoughts: %s\n", aurora.BrightWhite(parsedResult.Value))
+				// tools.RunLocalTTS("Current thoughts: " + parsedResult.Value.(string))
 			}
 			if parsedResult.HasAnyTags("command") {
 				v := parsedResult.Value
 				argsJson, _ := json.Marshal(v.(map[string]interface{})["args"])
-				fmt.Printf("[%d] command: %s, args: %v\n", depth,
+				fmt.Printf("command: %s, args: %v\n",
 					aurora.BrightYellow(v.(map[string]interface{})["name"]),
 					aurora.BrightWhite(string(argsJson)))
 				commandName, okCommandName := v.(map[string]interface{})["name"].(string)
@@ -41,7 +42,7 @@ func TranslateToServerCalls(depth int, agentState *GeneralAgentInfo, results []*
 	return clientRequests
 }
 
-var notes = make(map[string]string)
+var notes = make(map[string][]string)
 
 func getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
 	clientRequest := &cmds.ClientRequest{
@@ -70,23 +71,30 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 			clientRequest.SpecialCaseResponse = "No section or text specified."
 			break
 		}
+		sectionString := section.(string)
+
+		notes[sectionString] = make([]string, 0)
 		switch text.(type) {
 		case string:
-			notes[section.(string)] = text.(string)
-		case []interface{}:
-			for _, t := range text.([]interface{}) {
-				notes[section.(string)] += t.(string)
-			}
+			notes[sectionString] = append(notes[sectionString], text.(string))
+		default:
+			jsonText, _ := json.Marshal(text)
+			notes[sectionString] = append(notes[sectionString], string(jsonText))
 		}
 		clientRequest.SpecialCaseResponse = "Ok, note saved."
+
+		allNotesJson, err := json.Marshal(notes)
+		if err == nil {
+			_ = os.WriteFile("/tmp/ai-notes.json", allNotesJson, 0644)
+		}
 	case "read-note":
 		section := args["section"]
 		if section == nil {
 			clientRequest.SpecialCaseResponse = "No section specified."
 		} else {
-			text, found := notes[section.(string)]
+			texts, found := notes[section.(string)]
 			if found {
-				clientRequest.SpecialCaseResponse = text
+				clientRequest.SpecialCaseResponse = texts[len(texts)-1]
 			} else {
 				clientRequest.SpecialCaseResponse = "No note found."
 			}
@@ -102,13 +110,34 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		case string:
 			// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
 			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
-			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
-			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
-			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
-			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
+			appendFile("say.log", question.(string))
 		}
+	case "hire-agent":
+		fmt.Printf("Hiring agent: %s\n", args["name"])
+	case "browse-site":
+		fmt.Printf("Browsing site: %s\n", args["url"])
+	case "none":
+		fmt.Printf("No command found.\n")
+	default:
+		fmt.Printf("Unknown command: %s\n", commandName)
 	}
 	clientRequest.CorrelationId = resultId
 
 	return clientRequest
+}
+
+func appendFile(fname string, text string) {
+	// append to log file fname, create it if it doesn't exist
+	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("failed opening file: %s\n", err)
+		return
+	}
+
+	defer f.Close()
+
+	if _, err := f.WriteString(text + "\n"); err != nil {
+		fmt.Printf("failed writing to file: %s\n", err)
+		return
+	}
 }

@@ -7,7 +7,7 @@ import (
 	"net/http"
 )
 
-var ttsQueue = make(chan string, 100)
+var ttsQueue = make(chan string, 100000)
 
 func init() {
 	go func() {

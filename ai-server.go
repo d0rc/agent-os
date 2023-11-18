@@ -101,6 +101,7 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 	}
 
 	result.CorrelationId = request.CorrelationId
+	result.SpecialCaseResponse = request.SpecialCaseResponse
 
 	return result, nil
 }
