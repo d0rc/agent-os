@@ -141,7 +141,7 @@ func GeneralAgentPipelineStep(agentState *GeneralAgentInfo,
 		jobs = append(jobs, cmds.GetCompletionRequest{
 			RawPrompt:   chatToRawPrompt(chat),
 			MinResults:  minResults,
-			Temperature: 0.8,
+			Temperature: 0.9,
 		})
 	}
 

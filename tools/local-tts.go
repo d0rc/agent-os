@@ -11,8 +11,13 @@ var ttsQueue = make(chan string, 100)
 
 func init() {
 	go func() {
+		cache := make(map[string]bool)
 		for {
 			text := <-ttsQueue
+			if _, ok := cache[text]; ok {
+				continue
+			}
+			cache[text] = true
 			_runLocalTTS(text)
 		}
 	}()

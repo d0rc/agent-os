@@ -66,7 +66,18 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 	case "write-note":
 		section := args["section"]
 		text := args["text"]
-		notes[section.(string)] = text.(string)
+		if section == nil || text == nil {
+			clientRequest.SpecialCaseResponse = "No section or text specified."
+			break
+		}
+		switch text.(type) {
+		case string:
+			notes[section.(string)] = text.(string)
+		case []interface{}:
+			for _, t := range text.([]interface{}) {
+				notes[section.(string)] += t.(string)
+			}
+		}
 		clientRequest.SpecialCaseResponse = "Ok, note saved."
 	case "read-note":
 		section := args["section"]

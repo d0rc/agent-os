@@ -7,6 +7,10 @@ AgencyOS is not an operating system for computer users, but rather a computation
 - High-performance multi-agent execution environment for mixed compute
 - A set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding, for laptops
 
+## I don't want to setup it to see what examples are doing
+
+https://youtu.be/0fUT0KdozjE
+
 ## Unix `top` style bird-eyes view
 
 A glimpse of what `top` output looks like:
