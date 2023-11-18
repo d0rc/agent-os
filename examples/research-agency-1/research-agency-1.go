@@ -35,9 +35,9 @@ func main() {
 	for {
 		results, err := agency.GeneralAgentPipelineStep(agentState,
 			currentDepth, // currentDepth
-			4,            // batchSize
-			10000,        // maxSamplingAttempts
-			4,            // minResults
+			9,            // batchSize
+			100_000,      // maxSamplingAttempts
+			9,            // minResults
 		)
 		if err != nil {
 			lg.Error().Err(err).
@@ -54,8 +54,8 @@ func main() {
 			}
 			// fmt.Printf("Got responses: %v\n", res)
 			// we've got responses, if we have observations let's put them into the history
-			for _, commandResponse := range res {
-				for _, observation := range generateObservationFromServerResults(commandResponse, 1024) {
+			for idx, commandResponse := range res {
+				for _, observation := range generateObservationFromServerResults(clientRequests[idx], commandResponse, 1024) {
 					messageId := agency.GenerateMessageId(observation)
 					agentState.History = append(agentState.History, &engines.Message{
 						ID:      &messageId,
@@ -73,9 +73,14 @@ func main() {
 	fmt.Printf("Done in %v\n", time.Since(ts))
 }
 
-func generateObservationFromServerResults(response *cmds.ServerResponse, maxLength int) []string {
+func generateObservationFromServerResults(request *cmds.ClientRequest, response *cmds.ServerResponse, maxLength int) []string {
 	observations := make([]string, 0)
 	observation := ""
+	if request.SpecialCaseResponse != "" {
+		observations = append(observations, request.SpecialCaseResponse)
+		return observations
+	}
+
 	if len(response.GoogleSearchResponse) > 0 {
 		for _, searchResponse := range response.GoogleSearchResponse {
 			//observation += fmt.Sprintf("Search results for \"%s\":\n", searchResponse.Keywords)

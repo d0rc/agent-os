@@ -13,7 +13,7 @@ func init() {
 	go func() {
 		for {
 			text := <-ttsQueue
-			runLocalTTS(text)
+			_runLocalTTS(text)
 		}
 	}()
 }
@@ -22,7 +22,7 @@ func RunLocalTTS(text string) {
 	ttsQueue <- text
 }
 
-func runLocalTTS(text string) {
+func _runLocalTTS(text string) {
 	type ttsRequest struct {
 		Text string `json:"text"`
 	}

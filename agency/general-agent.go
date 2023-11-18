@@ -131,7 +131,7 @@ func GeneralAgentPipelineStep(agentState *GeneralAgentInfo,
 	// so sort chats by the lebgth
 	// and pick the top batchSize
 	sort.Slice(chats, func(i, j int) bool {
-		return len(chats[i]) > len(chats[j])
+		return len(chats[i]) < len(chats[j])
 	})
 	if len(chats) > batchSize {
 		chats = chats[:batchSize]

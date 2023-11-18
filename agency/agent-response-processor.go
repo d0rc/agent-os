@@ -17,7 +17,7 @@ func TranslateToServerCalls(depth int, agentState *GeneralAgentInfo, results []*
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {
 				fmt.Printf("[%d] thoughts: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
-				tools.RunLocalTTS(parsedResult.Value.(string))
+				tools.RunLocalTTS("Current thoughts: " + parsedResult.Value.(string))
 			}
 			if parsedResult.HasAnyTags("command") {
 				v := parsedResult.Value
@@ -41,6 +41,8 @@ func TranslateToServerCalls(depth int, agentState *GeneralAgentInfo, results []*
 	return clientRequests
 }
 
+var notes = make(map[string]string)
+
 func getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
 	clientRequest := &cmds.ClientRequest{
 		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
@@ -60,6 +62,39 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 					Keywords: keyword.(string),
 				})
 			}
+		}
+	case "write-note":
+		section := args["section"]
+		text := args["text"]
+		notes[section.(string)] = text.(string)
+		clientRequest.SpecialCaseResponse = "Ok, note saved."
+	case "read-note":
+		section := args["section"]
+		if section == nil {
+			clientRequest.SpecialCaseResponse = "No section specified."
+		} else {
+			text, found := notes[section.(string)]
+			if found {
+				clientRequest.SpecialCaseResponse = text
+			} else {
+				clientRequest.SpecialCaseResponse = "No note found."
+			}
+		}
+	case "list-notes":
+		clientRequest.SpecialCaseResponse = "Notes:\n"
+		for section, text := range notes {
+			clientRequest.SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
+		}
+	case "speak":
+		question := args["text"]
+		switch question.(type) {
+		case string:
+			// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
+			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
+			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
+			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
+			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
+			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
 		}
 	}
 	clientRequest.CorrelationId = resultId

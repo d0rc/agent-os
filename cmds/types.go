@@ -76,6 +76,7 @@ type ClientRequest struct {
 	GetCompletionRequests []GetCompletionRequest    `json:"get-completion-requests"`
 	GetEmbeddingsRequests []GetEmbeddingsRequest    `json:"get-embeddings-requests"`
 	CorrelationId         string                    `json:"correlation-id"`
+	SpecialCaseResponse   string                    `json:"special-case-response"`
 }
 
 type ServerResponse struct {
@@ -84,4 +85,5 @@ type ServerResponse struct {
 	GetCompletionResponse []*GetCompletionResponse `json:"get-completion-response"`
 	GetEmbeddingsResponse []*GetEmbeddingsResponse `json:"get-embeddings-response"`
 	CorrelationId         string                   `json:"correlation-id"`
+	SpecialCaseResponse   string                   `json:"special-case-response"`
 }
