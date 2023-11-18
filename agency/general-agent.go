@@ -11,8 +11,10 @@ import (
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/google/uuid"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -241,44 +243,79 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 			ID:      &messageId,
 		}
 
+		searchTs := time.Now()
 		// ok, now, we always start with system message
 		chats := make([][]*engines.Message, 0, batchSize)
+		chatsChannel := make(chan []*engines.Message, 16384)
 		jobs := make([]cmds.ClientRequest, 0, batchSize)
 		samplingAttempt := 0
-		for {
-			samplingAttempt++
-			if samplingAttempt > maxSamplingAttempts {
-				break
-			}
-			if len(jobs) >= batchSize {
-				break
-			}
-			chat := make([]*engines.Message, 0)
-			chat = append(chat, systemMessage)
+		maxParallelThreads := make(chan struct{}, runtime.NumCPU()-1)
+		doneChannel := make(chan struct{}, 1)
+		wg := sync.WaitGroup{}
+		go func() {
 			for {
-				options := make([]*engines.Message, 0)
-				for _, msg := range agentState.History {
-					if *msg.ReplyTo == *chat[len(chat)-1].ID {
-						options = append(options, msg)
+				samplingAttempt++
+				maxParallelThreads <- struct{}{}
+				wg.Add(1)
+				go func() {
+					defer func() {
+						<-maxParallelThreads
+						wg.Done()
+					}()
+					chat := make([]*engines.Message, 0)
+					chat = append(chat, systemMessage)
+					for {
+						options := make([]*engines.Message, 0)
+						for _, msg := range agentState.History {
+							if *msg.ReplyTo == *chat[len(chat)-1].ID {
+								options = append(options, msg)
+							}
+						}
+						// ok, now we have len(options) messages to choose from
+						if len(options) == 0 {
+							// it's the end of the thread, continue to the next one
+							break
+						}
+						// pick a random message from options
+						messageToAdd := options[randomInt(len(options))]
+						chat = append(chat, messageToAdd)
 					}
-				}
-				// ok, now we have len(options) messages to choose from
-				if len(options) == 0 {
-					// it's the end of the thread, continue to the next one
+
+					if chat == nil || len(chat) == 0 {
+						return
+					}
+					if chat[len(chat)-1].Role != engines.ChatRoleAssistant {
+						// chats = append(chats, chat)
+						chatsChannel <- chat
+					}
+				}()
+
+				if samplingAttempt > maxSamplingAttempts {
+					doneChannel <- struct{}{}
 					break
 				}
-				// pick a random message from options
-				messageToAdd := options[randomInt(len(options))]
-				chat = append(chat, messageToAdd)
+				if len(chats) >= batchSize {
+					doneChannel <- struct{}{}
+					break
+				}
+			}
+		}()
+
+		for {
+			done := false
+			select {
+			case chat := <-chatsChannel:
+				chats = append(chats, chat)
+			case <-doneChannel:
+				done = true
 			}
 
-			if chat == nil || len(chat) == 0 {
-				continue
-			}
-			if chat[len(chat)-1].Role != engines.ChatRoleAssistant {
-				chats = append(chats, chat)
+			if done {
+				break
 			}
 		}
+
+		wg.Wait()
 
 		// now pick the top maxBatchSize chats
 		// so sort chats by the lebgth
@@ -318,7 +355,8 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 			}
 		}
 
-		fmt.Printf("Running inference for %d chats, min len: %d, max len: %d\n", len(chats), minLen, maxLen)
+		fmt.Printf("Running inference for %d chats, min len: %d, max len: %d, search took: %v\n", len(chats), minLen, maxLen,
+			time.Since(searchTs))
 		// now we have jobs, let's run them
 		originalHistorySize := atomic.LoadInt32(&agentState.historySize)
 		for _, job := range jobs {
@@ -328,7 +366,8 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 		// no we have to wait until we've got at least len(jobs) new history messages
 		for {
 			historySize := atomic.LoadInt32(&agentState.historySize)
-			if historySize >= originalHistorySize+int32(len(jobs)) {
+			if historySize >= originalHistorySize+int32(len(jobs)/2) {
+				fmt.Printf("Got %d new messages in history, going to continue searching language space\n", historySize-originalHistorySize)
 				break
 			}
 			time.Sleep(1 * time.Second)
