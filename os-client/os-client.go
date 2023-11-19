@@ -48,7 +48,13 @@ func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Dur
 	return finalResponses, nil
 }
 
+var maxParallelRequestsChannel = make(chan struct{}, 100)
+
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration) (*cmds.ServerResponse, error) {
+	maxParallelRequestsChannel <- struct{}{}
+	defer func() {
+		<-maxParallelRequestsChannel
+	}()
 	client := http.Client{Timeout: timeout}
 
 	reqBytes, err := json.Marshal(req)

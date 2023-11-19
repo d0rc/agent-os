@@ -99,7 +99,16 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 			clientRequest.SpecialCaseResponse = "No section specified."
 		} else {
 			notesLock.RLock()
-			texts, found := notes[section.(string)]
+			var texts []string
+			var found bool = false
+			switch section.(type) {
+			case string:
+				texts, found = notes[section.(string)]
+			case []interface{}:
+				if len(section.([]interface{})) == 1 {
+					texts, found = notes[section.([]interface{})[0].(string)]
+				}
+			}
 			notesLock.RUnlock()
 			if found {
 				clientRequest.SpecialCaseResponse = texts[len(texts)-1]

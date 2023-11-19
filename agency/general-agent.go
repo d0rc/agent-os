@@ -108,7 +108,7 @@ func (agentState *GeneralAgentInfo) agentStateResultsReceiver() {
 		case <-agentState.quitChannelResults:
 			return
 		case serverResult := <-agentState.resultsChannel:
-			if serverResult.GetCompletionResponse != nil &&
+			if serverResult != nil && serverResult.GetCompletionResponse != nil &&
 				len(serverResult.GetCompletionResponse) > 0 {
 				for _, jobResult := range serverResult.GetCompletionResponse {
 					for _, choice := range jobResult.Choices {

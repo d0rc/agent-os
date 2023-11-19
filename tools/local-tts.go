@@ -31,7 +31,7 @@ func _runLocalTTS(text string) {
 	type ttsRequest struct {
 		Text string `json:"text"`
 	}
-	ttsEndpoint := "http://localhost:5000/play"
+	ttsEndpoint := "http://localhost:5001/play"
 
 	// use standard library to make a request
 	requestJson, err := json.Marshal(ttsRequest{Text: text})

@@ -75,7 +75,7 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 		node.RemoteEngine = newRemoteEngine
 	}(node)
 
-	go func() {
+	go func(node *InferenceNode) {
 		<-doneChannel
 		if node.RemoteEngine.CompletionFailed &&
 			node.RemoteEngine.EmbeddingsFailed {
@@ -88,7 +88,7 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 			ie.AddNodeChan <- node
 			ie.InferenceDone <- node
 		}
-	}()
+	}(node)
 
 	return autodetectFinished
 }
