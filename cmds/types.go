@@ -3,10 +3,12 @@ package cmds
 import borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 
 type GetPageRequest struct {
-	Url        string `json:"url"`
-	TimeOut    int    `json:"time-out"`
-	MaxRetries int    `json:"max-retries"`
-	MaxAge     int    `json:"max-age"`
+	Url           string `json:"url"`
+	TimeOut       int    `json:"time-out"`
+	MaxRetries    int    `json:"max-retries"`
+	MaxAge        int    `json:"max-age"`
+	Question      string `json:"question"`
+	ReturnSummary bool   `json:"return-summary"`
 }
 
 type GetPageResponse struct {
@@ -15,6 +17,8 @@ type GetPageResponse struct {
 	RawData      string `json:"raw-data"`
 	DownloadedAt int    `json:"downloaded-at"`
 	PageAge      int    `json:"page-age"`
+	Question     string `json:"question"`
+	Url          string `json:"url"`
 }
 
 type GoogleSearchRequest struct {

@@ -23,18 +23,44 @@ func (agentState *GeneralAgentInfo) TranslateToServerCalls(results []*engines.Me
 			}
 			if parsedResult.HasAnyTags("command") {
 				v := parsedResult.Value
-				argsJson, _ := json.Marshal(v.(map[string]interface{})["args"])
-				fmt.Printf("command: %s, args: %v\n",
-					aurora.BrightYellow(v.(map[string]interface{})["name"]),
-					aurora.BrightWhite(string(argsJson)))
-				commandName, okCommandName := v.(map[string]interface{})["name"].(string)
-				argsData, okArgsData := v.(map[string]interface{})["args"].(map[string]interface{})
-				if okCommandName && okArgsData {
-					clientRequests = append(clientRequests,
-						getServerCommand(
-							*res.ID,
-							commandName,
-							argsData))
+				switch v.(type) {
+				case map[string]interface{}:
+					argsJson, _ := json.Marshal(v.(map[string]interface{})["args"])
+					fmt.Printf("command: %s, args: %v\n",
+						aurora.BrightYellow(v.(map[string]interface{})["name"]),
+						aurora.BrightWhite(string(argsJson)))
+					commandName, okCommandName := v.(map[string]interface{})["name"].(string)
+					argsData, okArgsData := v.(map[string]interface{})["args"].(map[string]interface{})
+					if okCommandName && okArgsData {
+						clientRequests = append(clientRequests,
+							getServerCommand(
+								*res.ID,
+								commandName,
+								argsData))
+					}
+				case []map[string]interface{}:
+					// ok, it's a list of commands, for a fuck sake...
+					cmdList, _ := v.([]map[string]interface{})
+					for _, cmd := range cmdList {
+						argsJson, _ := json.Marshal(cmd["args"])
+						fmt.Printf("command: %s, args: %v\n",
+							aurora.BrightYellow(cmd["name"]),
+							aurora.BrightWhite(string(argsJson)))
+						commandName, okCommandName := cmd["name"].(string)
+						argsData, okArgsData := cmd["args"].(map[string]interface{})
+						if okCommandName && okArgsData {
+							clientRequests = append(clientRequests,
+								getServerCommand(
+									*res.ID,
+									commandName,
+									argsData))
+						}
+					}
+				default:
+					argsJson, _ := json.Marshal(v)
+					fmt.Printf("command: %v, args: %v\n",
+						aurora.BrightRed(v),
+						aurora.BrightWhite(string(argsJson)))
 				}
 			}
 		}
@@ -134,7 +160,14 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 	case "hire-agent":
 		fmt.Printf("Hiring agent: %s\n", args["name"])
 	case "browse-site":
-		fmt.Printf("Browsing site: %s\n", args["url"])
+		url := args["url"].(string)
+		question := args["question"].(string)
+		fmt.Printf("Browsing site: %s - %s\n", url, question)
+		clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
+			Url:           url,
+			Question:      question,
+			ReturnSummary: false,
+		})
 	case "none":
 		fmt.Printf("No command found.\n")
 	default:

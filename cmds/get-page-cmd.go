@@ -78,7 +78,10 @@ func processPageRequest(pr GetPageRequest, ctx *server.Context) (*GetPageRespons
 				ctx.Log.Error().Err(err).Msgf("error marking page cache hit: %v", cachedPage[0].Id)
 			}
 
-			return translateCacheRecordToClientResponse(&cachedPage[0], ctx), nil
+			pageCacheRecord := translateCacheRecordToClientResponse(&cachedPage[0], ctx)
+			pageCacheRecord.Question = pr.Question
+			pageCacheRecord.Url = pr.Url
+			return pageCacheRecord, nil
 		}
 	}
 

@@ -10,17 +10,17 @@ import (
 func TestComputeRoutingWorksTest(t *testing.T) {
 	// create engine
 	engine := NewInferenceEngine(ComputeFunction{
-		JT_Completion: func(node *InferenceNode, jobs []*ComputeJob) []*ComputeJob {
+		JT_Completion: func(node *InferenceNode, jobs []*ComputeJob) ([]*ComputeJob, error) {
 			//fmt.Printf("Running batch of %d jobs on node %s\n", len(jobs), node.EndpointUrl)
 			time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
-			return jobs
+			return jobs, nil
 		},
-		JT_Embeddings: func(node *InferenceNode, jobs []*ComputeJob) []*ComputeJob {
+		JT_Embeddings: func(node *InferenceNode, jobs []*ComputeJob) ([]*ComputeJob, error) {
 			//fmt.Printf("Running batch of %d jobs on node %s\n", len(jobs), node.EndpointUrl)
 			time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)
-			return jobs
+			return jobs, nil
 		},
-	})
+	}, nil)
 	go engine.Run()
 
 	// add ten random nodes with
