@@ -10,6 +10,7 @@ import (
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/google/uuid"
+	"github.com/logrusorgru/aurora"
 	"math/rand"
 	"runtime"
 	"sort"
@@ -18,6 +19,9 @@ import (
 	"sync/atomic"
 	"time"
 )
+
+// ResultsNumberDelta if nothing interesting got generated, increase number of _new_ results
+const ResultsNumberDelta = 10
 
 type GeneralAgentInfo struct {
 	SystemName               string
@@ -79,8 +83,19 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 		case <-agentState.quitHistoryAppeneder:
 			return
 		case message := <-agentState.historyAppenderChannel:
-			agentState.History = append(agentState.History, message)
-			atomic.AddInt32(&agentState.historySize, 1)
+			// let's see if message already in the History
+			messageId := message.ID
+			alreadyExists := false
+			for _, storedMessage := range agentState.History {
+				if storedMessage.ID == messageId {
+					alreadyExists = true
+					break
+				}
+			}
+			if !alreadyExists {
+				agentState.History = append(agentState.History, message)
+				atomic.AddInt32(&agentState.historySize, 1)
+			}
 		}
 	}
 }
@@ -196,6 +211,7 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 				samplingAttempt++
 				maxParallelThreads <- struct{}{}
 				wg.Add(1)
+				chatsFound := int32(0)
 				go func() {
 					defer func() {
 						<-maxParallelThreads
@@ -226,11 +242,20 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 					if chat[len(chat)-1].Role != engines.ChatRoleAssistant {
 						// chats = append(chats, chat)
 						chatsChannel <- chat
+						atomic.AddInt32(&chatsFound, 1)
 					}
 				}()
 
 				if samplingAttempt > maxSamplingAttempts {
 					doneChannel <- struct{}{}
+					if atomic.LoadInt32(&chatsFound) == 0 {
+						// we've failed to find any chat to continue with
+						// let's try from system message again
+						chatsChannel <- []*engines.Message{
+							systemMessage,
+						}
+						minResults += ResultsNumberDelta
+					}
 					break
 				}
 				if len(chats) >= batchSize {
@@ -312,7 +337,9 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 		for {
 			historySize := atomic.LoadInt32(&agentState.historySize)
 			if historySize >= originalHistorySize+int32(len(jobs)/2) {
-				fmt.Printf("Got %d new messages in history, going to continue searching language space\n", historySize-originalHistorySize)
+				fmt.Printf("Got %d/%d new messages in history, going to continue searching language space\n",
+					aurora.BrightBlue(historySize-originalHistorySize),
+					aurora.BrightCyan(historySize))
 				break
 			}
 			time.Sleep(1 * time.Second)

@@ -160,14 +160,52 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 	case "hire-agent":
 		fmt.Printf("Hiring agent: %s\n", args["name"])
 	case "browse-site":
-		url := args["url"].(string)
-		question := args["question"].(string)
-		fmt.Printf("Browsing site: %s - %s\n", url, question)
-		clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
-			Url:           url,
-			Question:      question,
-			ReturnSummary: false,
-		})
+		var url []string = make([]string, 0)
+		var question []string = make([]string, 0)
+		gotError := false
+		if args["url"] != nil {
+			switch args["url"].(type) {
+			case string:
+				url = append(url, args["url"].(string))
+			case []interface{}:
+				for _, u := range args["url"].([]interface{}) {
+					switch u.(type) {
+					case string:
+						url = append(url, u.(string))
+					}
+				}
+			}
+		} else {
+			clientRequest.SpecialCaseResponse = "No url specified."
+			gotError = true
+		}
+		if args["question"] != nil {
+			switch args["question"].(type) {
+			case string:
+				question = append(question, args["question"].(string))
+			case []interface{}:
+				for _, q := range args["question"].([]interface{}) {
+					switch q.(type) {
+					case string:
+						question = append(question, q.(string))
+					}
+				}
+			}
+		} else {
+			clientRequest.SpecialCaseResponse = "No question specified."
+			gotError = true
+		}
+
+		fmt.Printf("Browsing site: %v - %v, err: %v\n", url, question, gotError)
+		for _, subUrl := range url {
+			for _, subQuestion := range question {
+				clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
+					Url:           subUrl,
+					Question:      subQuestion,
+					ReturnSummary: false,
+				})
+			}
+		}
 	case "none":
 		fmt.Printf("No command found.\n")
 	default:

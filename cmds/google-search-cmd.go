@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/server"
 	g "github.com/serpapi/google-search-results-golang"
+	"sync"
 	"time"
 )
 
@@ -44,6 +45,9 @@ type GoogleSearchCacheRecord struct {
 	CacheHits  int64     `db:"cache_hits"`
 }
 
+var currentSearches = make(map[string][]chan *GoogleSearchResponse)
+var currentSearchesLock = sync.RWMutex{}
+
 func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*GoogleSearchResponse, error) {
 	cachedSearches := make([]GoogleSearchCacheRecord, 0, 1)
 	err := ctx.Storage.Db.GetStructsSlice("query-search-by-keywords", &cachedSearches,
@@ -72,6 +76,20 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 		}
 	}
 
+	mapResultsChannel := make(chan *GoogleSearchResponse)
+	currentSearchesLock.Lock()
+	if _, exists := currentSearches[gsr.Keywords]; exists {
+		currentSearches[gsr.Keywords] = append(currentSearches[gsr.Keywords], mapResultsChannel)
+		currentSearchesLock.Unlock()
+
+		someResult := <-mapResultsChannel
+		if someResult.URLSearchInfos == nil {
+			return nil, fmt.Errorf("error running Google search for keywords: %s", gsr.Keywords)
+		}
+	}
+	currentSearches[gsr.Keywords] = make([]chan *GoogleSearchResponse, 0)
+	currentSearchesLock.Unlock()
+
 	if gsr.MaxRetries == 0 {
 		gsr.MaxRetries = 10
 	}
@@ -90,7 +108,17 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 	if result == nil {
 		ctx.Log.Error().Err(err).
 			Msgf("[MAX-ATTEMPT-REACHED] error running google search for keywords: %s", gsr.Keywords)
-
+		// also send error to all channels
+		currentSearchesLock.Lock()
+		for _, ch := range currentSearches[gsr.Keywords] {
+			ch <- &GoogleSearchResponse{
+				URLSearchInfos: nil,
+				AnswerBox:      "",
+				DownloadedAt:   -1,
+				SearchAge:      0,
+			}
+		}
+		currentSearchesLock.Unlock()
 		return nil, fmt.Errorf("error running Google search for keywords: %s", gsr.Keywords)
 	}
 
@@ -114,12 +142,20 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 			Msgf("almost fatal error - failed to parse most recent search result for keywords: %s", gsr.Keywords)
 	}
 
-	return &GoogleSearchResponse{
-		AnswerBox:      searchData.AnswerBox,
+	// send to all channels...!
+	finalResponse := &GoogleSearchResponse{
 		URLSearchInfos: searchData.OrganicUrs,
-		DownloadedAt:   time.Now().Second(),
-		SearchAge:      0,
-	}, nil
+		AnswerBox:      searchData.AnswerBox,
+		DownloadedAt:   result.CreatedAt.Second(),
+		SearchAge:      int(time.Since(result.CreatedAt).Seconds()),
+	}
+	currentSearchesLock.Lock()
+	for _, ch := range currentSearches[gsr.Keywords] {
+		ch <- finalResponse
+	}
+	currentSearchesLock.Unlock()
+
+	return finalResponse, nil
 }
 
 func executeSearch(gsr *GoogleSearchRequest, ctx *server.Context) (result *GoogleSearchCacheRecord, err error) {

@@ -27,6 +27,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				for idx, commandResponse := range ioResponses {
 					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024) {
 						messageId := GenerateMessageId(observation)
+						fmt.Printf("got observation: %v\n", observation)
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &messageId,
 							ReplyTo: &commandResponse.CorrelationId, // it should be equal to message.ID TODO: check
@@ -48,7 +49,7 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 		return observations
 	}
 
-	if len(response.GoogleSearchResponse) > 0 {
+	if response.GoogleSearchResponse != nil && len(response.GoogleSearchResponse) > 0 {
 		for _, searchResponse := range response.GoogleSearchResponse {
 			//observation += fmt.Sprintf("Search results for \"%s\":\n", searchResponse.Keywords)
 			for _, searchResult := range searchResponse.URLSearchInfos {

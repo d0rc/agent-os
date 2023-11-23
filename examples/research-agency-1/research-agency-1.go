@@ -26,13 +26,13 @@ func main() {
 
 	lg.Info().Interface("agencySettings", agencySettings).Msg("parsed agency")
 
-	client := os_client.NewAgentOSClient("http://localhost:9000")
+	client := os_client.NewAgentOSClient("http://167.235.115.231:9000")
 	agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
 
 	err = agentState.GeneralAgentPipelineRun( // currentDepth
 		9,       // batchSize
 		100_000, // maxSamplingAttempts
-		9,       // minResults
+		81,      // minResults
 	)
 	if err != nil {
 		lg.Error().Err(err).
