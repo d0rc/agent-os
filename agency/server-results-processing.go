@@ -1,9 +1,11 @@
 package agency
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
 	"time"
 )
@@ -30,7 +32,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 						fmt.Printf("got nothing in server response at index %d\n", idx)
 						continue
 					}
-					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024) {
+					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024, agentState) {
 						messageId := engines.GenerateMessageId(observation)
 						fmt.Printf("got observation: %v\n", observation)
 						correlationId := commandResponse.CorrelationId
@@ -47,7 +49,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 	}
 }
 
-func generateObservationFromServerResults(request *cmds.ClientRequest, response *cmds.ServerResponse, maxLength int) []string {
+func generateObservationFromServerResults(request *cmds.ClientRequest, response *cmds.ServerResponse, maxLength int, agentState *GeneralAgentInfo) []string {
 	observations := make([]string, 0)
 	observation := ""
 	if request.SpecialCaseResponse != "" {
@@ -77,10 +79,21 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 		for _, pageResponse := range response.GetPageResponse {
 			if pageResponse.Markdown != "" {
 				observation += fmt.Sprintf("Page content for \"%s\":\n", pageResponse.Url)
-				observation += fmt.Sprintf("%s\n\n", pageResponse.Markdown)
+				observation += fmt.Sprintf("```\n%s\n```\n", pageResponse.Markdown)
 				if len(observation) > maxLength {
 					observations = append(observations, observation)
 					observation = ""
+				} else {
+					// ok, we've got the observation, lets reduce over it
+					finalResult := make(map[string]interface{})
+					tools.DocumentReduce(observation, pageResponse.Question, agentState.Server, func(s string) error {
+						return json.Unmarshal([]byte(s), &finalResult)
+					}, "")
+
+					serializedResult, err := json.Marshal(finalResult)
+					if err == nil {
+						observation = string(serializedResult)
+					}
 				}
 			}
 		}
