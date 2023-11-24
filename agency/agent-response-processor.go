@@ -7,6 +7,7 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/logrusorgru/aurora"
+	"net/url"
 	"os"
 	"sync"
 )
@@ -160,18 +161,18 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 	case "hire-agent":
 		fmt.Printf("Hiring agent: %s\n", args["name"])
 	case "browse-site":
-		var url []string = make([]string, 0)
-		var question []string = make([]string, 0)
+		var urls []string = make([]string, 0)
+		var questions []string = make([]string, 0)
 		gotError := false
 		if args["url"] != nil {
 			switch args["url"].(type) {
 			case string:
-				url = append(url, args["url"].(string))
+				urls = append(urls, args["url"].(string))
 			case []interface{}:
 				for _, u := range args["url"].([]interface{}) {
 					switch u.(type) {
 					case string:
-						url = append(url, u.(string))
+						urls = append(urls, u.(string))
 					}
 				}
 			}
@@ -182,12 +183,12 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		if args["question"] != nil {
 			switch args["question"].(type) {
 			case string:
-				question = append(question, args["question"].(string))
+				questions = append(questions, args["question"].(string))
 			case []interface{}:
 				for _, q := range args["question"].([]interface{}) {
 					switch q.(type) {
 					case string:
-						question = append(question, q.(string))
+						questions = append(questions, q.(string))
 					}
 				}
 			}
@@ -196,15 +197,29 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 			gotError = true
 		}
 
-		fmt.Printf("Browsing site: %v - %v, err: %v\n", url, question, gotError)
-		for _, subUrl := range url {
-			for _, subQuestion := range question {
-				clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
-					Url:           subUrl,
-					Question:      subQuestion,
-					ReturnSummary: false,
-				})
+		for _, subUrl := range urls {
+			// check url is not malformed:
+			_, err := url.ParseRequestURI(subUrl)
+			if err != nil {
+				clientRequest.SpecialCaseResponse = fmt.Sprintf("Malformed URL: %s", subUrl)
+				gotError = true
+				break
 			}
+		}
+
+		if !gotError {
+			fmt.Printf("Browsing site: %v - %v, err: %v\n", urls, questions, gotError)
+			for _, subUrl := range urls {
+				for _, subQuestion := range questions {
+					clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
+						Url:           subUrl,
+						Question:      subQuestion,
+						ReturnSummary: false,
+					})
+				}
+			}
+		} else {
+
 		}
 	case "none":
 		fmt.Printf("No command found.\n")
