@@ -78,7 +78,7 @@ func processPageRequest(pr GetPageRequest, ctx *server.Context) (*GetPageRespons
 				ctx.Log.Error().Err(err).Msgf("error marking page cache hit: %v", cachedPage[0].Id)
 			}
 
-			pageCacheRecord := translateCacheRecordToClientResponse(&cachedPage[0], ctx)
+			pageCacheRecord := translateCacheRecordToClientResponse(&cachedPage[0], ctx, pr.Question)
 			pageCacheRecord.Question = pr.Question
 			pageCacheRecord.Url = pr.Url
 			return pageCacheRecord, nil
@@ -127,10 +127,10 @@ func processPageRequest(pr GetPageRequest, ctx *server.Context) (*GetPageRespons
 		pageCacheRecord.Id, err = res.LastInsertId()
 	}
 
-	return translateCacheRecordToClientResponse(pageCacheRecord, ctx), nil
+	return translateCacheRecordToClientResponse(pageCacheRecord, ctx, pr.Question), nil
 }
 
-func translateCacheRecordToClientResponse(cachedPage *PageCacheRecord, ctx *server.Context) *GetPageResponse {
+func translateCacheRecordToClientResponse(cachedPage *PageCacheRecord, ctx *server.Context, question string) *GetPageResponse {
 	mdBody, err := renderMarkdown(string(cachedPage.RawContent))
 	if err != nil {
 		ctx.Log.Error().Err(err).Msgf("error rendering markdown for page cache id: %v",
@@ -138,11 +138,13 @@ func translateCacheRecordToClientResponse(cachedPage *PageCacheRecord, ctx *serv
 	}
 
 	pageResponse := &GetPageResponse{
-		StatusCode:   cachedPage.StatusCode,
-		Markdown:     mdBody,
-		RawData:      string(cachedPage.RawContent),
-		DownloadedAt: cachedPage.CreatedAt.Second(),
-		PageAge:      int(time.Since(cachedPage.CreatedAt).Seconds()),
+		StatusCode:       cachedPage.StatusCode,
+		Markdown:         mdBody,
+		RawData:          string(cachedPage.RawContent),
+		DownloadedAt:     cachedPage.CreatedAt.Second(),
+		PageAge:          int(time.Since(cachedPage.CreatedAt).Seconds()),
+		Url:              cachedPage.Url,
+		OriginalQuestion: question,
 	}
 	return pageResponse
 }

@@ -26,12 +26,17 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				// fmt.Printf("Got responses: %v\n", res)
 				// we've got responses, if we have observations let's put them into the history
 				for idx, commandResponse := range ioResponses {
+					if commandResponse == nil {
+						fmt.Printf("got nothing in server response at index %d\n", idx)
+						continue
+					}
 					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024) {
 						messageId := engines.GenerateMessageId(observation)
 						fmt.Printf("got observation: %v\n", observation)
+						correlationId := commandResponse.CorrelationId
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &messageId,
-							ReplyTo: &commandResponse.CorrelationId, // it should be equal to message.ID TODO: check
+							ReplyTo: &correlationId, // it should be equal to message.ID TODO: check
 							Role:    engines.ChatRoleUser,
 							Content: observation,
 						}

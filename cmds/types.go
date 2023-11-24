@@ -12,13 +12,14 @@ type GetPageRequest struct {
 }
 
 type GetPageResponse struct {
-	StatusCode   uint   `json:"status-code"`
-	Markdown     string `json:"markdown"`
-	RawData      string `json:"raw-data"`
-	DownloadedAt int    `json:"downloaded-at"`
-	PageAge      int    `json:"page-age"`
-	Question     string `json:"question"`
-	Url          string `json:"url"`
+	StatusCode       uint   `json:"status-code"`
+	Markdown         string `json:"markdown"`
+	RawData          string `json:"raw-data"`
+	DownloadedAt     int    `json:"downloaded-at"`
+	PageAge          int    `json:"page-age"`
+	Question         string `json:"question"`
+	Url              string `json:"url"`
+	OriginalQuestion string `json:"original-question"`
 }
 
 type GoogleSearchRequest struct {
