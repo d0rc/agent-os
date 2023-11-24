@@ -71,6 +71,27 @@ type GetCompletionResponse struct {
 	Choices []string `json:"choices"`
 }
 
+type GetCacheRecord struct {
+	Key       string `json:"key"`
+	Namespace string `json:"namespace"`
+}
+
+type GetCacheRecordResponse struct {
+	Key       string `json:"key"`
+	Namespace string `json:"namespace"`
+	Value     []byte `json:"value"`
+}
+
+type SetCacheRecord struct {
+	Namespace string `json:"namespace"`
+	Key       string `json:"key"`
+	Value     []byte `json:"value"`
+}
+
+type SetCacheRecordResponse struct {
+	Done bool `json:"done"`
+}
+
 type ClientRequest struct {
 	Tags                  []string                  `json:"tags"`
 	ProcessName           string                    `json:"process-name"`
@@ -81,13 +102,17 @@ type ClientRequest struct {
 	GetEmbeddingsRequests []GetEmbeddingsRequest    `json:"get-embeddings-requests"`
 	CorrelationId         string                    `json:"correlation-id"`
 	SpecialCaseResponse   string                    `json:"special-case-response"`
+	GetCacheRecords       []GetCacheRecord          `json:"get-cache-records"`
+	SetCacheRecords       []SetCacheRecord          `json:"set-cache-records"`
 }
 
 type ServerResponse struct {
-	GoogleSearchResponse  []*GoogleSearchResponse  `json:"google-search-response"`
-	GetPageResponse       []*GetPageResponse       `json:"get-page-response"`
-	GetCompletionResponse []*GetCompletionResponse `json:"get-completion-response"`
-	GetEmbeddingsResponse []*GetEmbeddingsResponse `json:"get-embeddings-response"`
-	CorrelationId         string                   `json:"correlation-id"`
-	SpecialCaseResponse   string                   `json:"special-case-response"`
+	GoogleSearchResponse  []*GoogleSearchResponse   `json:"google-search-response"`
+	GetPageResponse       []*GetPageResponse        `json:"get-page-response"`
+	GetCompletionResponse []*GetCompletionResponse  `json:"get-completion-response"`
+	GetEmbeddingsResponse []*GetEmbeddingsResponse  `json:"get-embeddings-response"`
+	GetCacheRecords       []*GetCacheRecordResponse `json:"get-cache-records"`
+	SetCacheRecords       []*SetCacheRecordResponse `json:"set-cache-records"`
+	CorrelationId         string                    `json:"correlation-id"`
+	SpecialCaseResponse   string                    `json:"special-case-response"`
 }

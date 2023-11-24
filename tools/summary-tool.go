@@ -5,6 +5,7 @@ import (
 	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
+	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/utils"
 	"github.com/logrusorgru/aurora"
@@ -27,12 +28,12 @@ func DocumentReduceGetCached(document, question string, ctx *server.Context) (st
 	return "", false
 }
 
-func DocumentReduce(document, question string, ctx *server.Context, parser func(string) error, model string) string {
+func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, parser func(string) error, model string) string {
 	if len(document) == 0 {
 		return ""
 	}
 
-	cachedResult, err := ctx.Storage.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
+	cachedResult, err := ctx.GetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
 		document, question))
 	if err == nil && cachedResult != nil && len(cachedResult) > 10 {
 		return string(cachedResult)
@@ -53,7 +54,7 @@ func DocumentReduce(document, question string, ctx *server.Context, parser func(
 		retryCounter := 0
 	retryGeneratingSummary:
 		retryCounter++
-		tmp, err := cmds.ProcessGetCompletions([]cmds.GetCompletionRequest{
+		tmp, err := os_client.ProcessGetCompletions([]cmds.GetCompletionRequest{
 			{
 				RawPrompt: fmt.Sprintf(`
 ### System: %s
@@ -128,19 +129,19 @@ func DocumentReduce(document, question string, ctx *server.Context, parser func(
 		return ""
 	}
 
-	_ = ctx.Storage.SaveTaskCacheResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
+	_ = ctx.SetTaskCachedResult("document-reduce-v1", fmt.Sprintf("%s\n%s",
 		document, question), []byte(currentSummary))
 
 	return currentSummary
 }
 
-func tokenizeDocument(document string, ctx *server.Context) ([]string, error) {
+func tokenizeDocument(document string, ctx *os_client.AgentOSClient) ([]string, error) {
 	// idea is to split document into batch of tokens of max length
 	// max_snippet_size = (info.LLM.GetContextLength() * 2 / 3)
 	// use info.LLM.Tokenize(document) to tokenize it
 	tokenizerTs := time.Now()
 
-	result, err := ctx.Storage.GetTaskCachedResult("gpt2-tokenizer", document)
+	result, err := ctx.GetTaskCachedResult("gpt2-tokenizer", document)
 	if err != nil && result != nil {
 		// ok, it's a hit...!
 		parsedResult := make([]string, 0)
@@ -170,7 +171,7 @@ func tokenizeDocument(document string, ctx *server.Context) ([]string, error) {
 
 	snippetsJSON, err := json.Marshal(snippets)
 	if err == nil {
-		_ = ctx.Storage.SaveTaskCacheResult("gpt2-tokenizer", document, snippetsJSON)
+		_ = ctx.SetTaskCachedResult("gpt2-tokenizer", document, snippetsJSON)
 	}
 
 	zlog.Info().

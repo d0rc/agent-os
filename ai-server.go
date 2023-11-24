@@ -96,6 +96,14 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 		result, err = cmds.ProcessGetEmbeddings(request.GetEmbeddingsRequests, ctx, request.ProcessName, request.Priority)
 	}
 
+	if request.GetCacheRecords != nil {
+		result, err = cmds.ProcessGetCacheRecords(request.GetCacheRecords, ctx, request.ProcessName)
+	}
+
+	if request.SetCacheRecords != nil {
+		result, err = cmds.ProcessSetCacheRecords(request.SetCacheRecords, ctx, request.ProcessName)
+	}
+
 	if err != nil {
 		return nil, err
 	}

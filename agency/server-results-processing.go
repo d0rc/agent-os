@@ -26,7 +26,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				// we've got responses, if we have observations let's put them into the history
 				for idx, commandResponse := range ioResponses {
 					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024) {
-						messageId := GenerateMessageId(observation)
+						messageId := engines.GenerateMessageId(observation)
 						fmt.Printf("got observation: %v\n", observation)
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &messageId,

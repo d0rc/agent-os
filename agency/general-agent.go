@@ -1,7 +1,6 @@
 package agency
 
 import (
-	"crypto/sha512"
 	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
@@ -9,7 +8,6 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
-	"github.com/google/uuid"
 	"github.com/logrusorgru/aurora"
 	"math/rand"
 	"runtime"
@@ -127,7 +125,7 @@ func (agentState *GeneralAgentInfo) agentStateResultsReceiver() {
 				len(serverResult.GetCompletionResponse) > 0 {
 				for _, jobResult := range serverResult.GetCompletionResponse {
 					for _, choice := range jobResult.Choices {
-						thisMessageId := GenerateMessageId(choice)
+						thisMessageId := engines.GenerateMessageId(choice)
 						resultMessage := &engines.Message{
 							ID:      &thisMessageId,
 							Content: choice,
@@ -190,7 +188,7 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 		responseFormat := agentState.Settings.GetResponseJSONFormat()
 
 		contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
-		messageId := GenerateMessageId(contextString)
+		messageId := engines.GenerateMessageId(contextString)
 		systemMessage := &engines.Message{
 			Role:    engines.ChatRoleSystem,
 			Content: contextString,
@@ -374,10 +372,6 @@ func getChatSignature(chat []*engines.Message) string {
 	}
 
 	return signature
-}
-
-func GenerateMessageId(body string) string {
-	return uuid.NewHash(sha512.New(), uuid.Nil, []byte(body), 5).String()
 }
 
 func chatToRawPrompt(sample []*engines.Message) string {

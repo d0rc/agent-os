@@ -1,6 +1,10 @@
 package engines
 
-import "github.com/d0rc/agent-os/vectors"
+import (
+	"crypto/sha512"
+	"github.com/d0rc/agent-os/vectors"
+	"github.com/google/uuid"
+)
 
 type ChatRole string
 
@@ -16,6 +20,10 @@ type Message struct {
 	MetaInfo interface{} `json:"meta,omitempty"`
 	Role     ChatRole    `json:"role"`
 	Content  string      `json:"content"`
+}
+
+func GenerateMessageId(body string) string {
+	return uuid.NewHash(sha512.New(), uuid.Nil, []byte(body), 5).String()
 }
 
 type GenerationSettings struct {
