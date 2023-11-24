@@ -79,28 +79,28 @@ func main() {
 func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.ServerResponse, error) {
 	var result *cmds.ServerResponse
 	var err error
-	if request.GetPageRequests != nil {
+	if request.GetPageRequests != nil && len(request.GetPageRequests) > 0 {
 		// got some page requests...!
 		result, err = cmds.ProcessPageRequests(request.GetPageRequests, ctx)
 	}
 
-	if request.GoogleSearchRequests != nil {
+	if request.GoogleSearchRequests != nil && len(request.GoogleSearchRequests) > 0 {
 		result, err = cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
 	}
 
-	if request.GetCompletionRequests != nil {
+	if request.GetCompletionRequests != nil && len(request.GetCompletionRequests) > 0 {
 		result, err = cmds.ProcessGetCompletions(request.GetCompletionRequests, ctx, request.ProcessName, request.Priority)
 	}
 
-	if request.GetEmbeddingsRequests != nil {
+	if request.GetEmbeddingsRequests != nil && len(request.GetEmbeddingsRequests) > 0 {
 		result, err = cmds.ProcessGetEmbeddings(request.GetEmbeddingsRequests, ctx, request.ProcessName, request.Priority)
 	}
 
-	if request.GetCacheRecords != nil {
+	if request.GetCacheRecords != nil && len(request.GetCacheRecords) > 0 {
 		result, err = cmds.ProcessGetCacheRecords(request.GetCacheRecords, ctx, request.ProcessName)
 	}
 
-	if request.SetCacheRecords != nil {
+	if request.SetCacheRecords != nil && len(request.SetCacheRecords) > 0 {
 		result, err = cmds.ProcessSetCacheRecords(request.SetCacheRecords, ctx, request.ProcessName)
 	}
 
