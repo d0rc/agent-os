@@ -167,7 +167,7 @@ func downloadPage(pr GetPageRequest, ctx *server.Context) (*PageCacheRecord, err
 		return nil, err
 	}
 
-	fmt.Printf("Dowloaded %s in %s\n",
+	ctx.Log.Info().Msgf("Downloaded %s in %s\n",
 		aurora.Cyan(noLongerThen(pr.Url, 45)), aurora.BrightCyan(time.Since(ts)))
 	return &PageCacheRecord{
 		Id:         0,
