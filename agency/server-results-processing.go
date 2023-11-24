@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/rs/zerolog/log"
 	"time"
 )
 
@@ -47,6 +48,11 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 	if request.SpecialCaseResponse != "" {
 		observations = append(observations, request.SpecialCaseResponse)
 		return observations
+	}
+
+	if response == nil {
+		log.Error().Msgf("Got a nil response from the server")
+		return []string{"server returned nothing..!"}
 	}
 
 	if response.GoogleSearchResponse != nil && len(response.GoogleSearchResponse) > 0 {

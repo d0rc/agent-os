@@ -80,10 +80,10 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 	currentSearchesLock.Lock()
 	if _, exists := currentSearches[gsr.Keywords]; exists {
 		currentSearches[gsr.Keywords] = append(currentSearches[gsr.Keywords], mapResultsChannel)
-		currentSearchesLock.Unlock()
 
 		someResult := <-mapResultsChannel
 		if someResult.URLSearchInfos == nil {
+			currentSearchesLock.Unlock()
 			return nil, fmt.Errorf("error running Google search for keywords: %s", gsr.Keywords)
 		}
 	}
