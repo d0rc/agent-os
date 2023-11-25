@@ -34,7 +34,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 					}
 					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024, agentState) {
 						messageId := engines.GenerateMessageId(observation)
-						fmt.Printf("got observation: %v\n", observation)
+						//fmt.Printf("got observation: %v\n", observation)
 						correlationId := commandResponse.CorrelationId
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &messageId,

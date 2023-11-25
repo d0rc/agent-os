@@ -57,7 +57,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 		cmd := &commandList{
 			Prompts:     promptBodies,
 			N:           1,
-			Max:         1024,
+			Max:         512,
 			Stop:        stopTokens,
 			Temperature: batch[0].Req.Temperature,
 			BestOf:      batch[0].Req.BestOf,
