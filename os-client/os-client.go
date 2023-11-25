@@ -51,6 +51,12 @@ func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Dur
 var maxParallelRequestsChannel = make(chan struct{}, 20)
 
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration) (*cmds.ServerResponse, error) {
+	if req.SpecialCaseResponse != "" {
+		return &cmds.ServerResponse{
+			SpecialCaseResponse: req.SpecialCaseResponse,
+			CorrelationId:       req.CorrelationId,
+		}, nil
+	}
 	maxParallelRequestsChannel <- struct{}{}
 	defer func() {
 		<-maxParallelRequestsChannel

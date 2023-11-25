@@ -80,7 +80,7 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 			if pageResponse.Markdown != "" {
 				observation += fmt.Sprintf("Page content for \"%s\":\n", pageResponse.Url)
 				observation += fmt.Sprintf("```\n%s\n```\n", pageResponse.Markdown)
-				if len(observation) > maxLength {
+				if len(observation) < maxLength {
 					observations = append(observations, observation)
 					observation = ""
 				} else {

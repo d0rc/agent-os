@@ -77,7 +77,7 @@ func main() {
 }
 
 func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.ServerResponse, error) {
-	var result *cmds.ServerResponse
+	var result *cmds.ServerResponse = &cmds.ServerResponse{}
 	var err error
 	if request.GetPageRequests != nil && len(request.GetPageRequests) > 0 {
 		// got some page requests...!

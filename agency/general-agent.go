@@ -392,7 +392,13 @@ func chatToRawPrompt(sample []*engines.Message) string {
 	return rawPrompt.String()
 }
 
+var source = rand.NewSource(0)
+var rng = rand.New(source)
+var rngLock = sync.RWMutex{}
+
 func randomInt(max int) int {
 	// generate value
-	return rand.Int() % max
+	rngLock.Lock()
+	defer rngLock.Unlock()
+	return rng.Int() % max
 }
