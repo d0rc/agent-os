@@ -58,7 +58,7 @@ func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Mess
 		}
 	}
 
-	fmt.Printf("Done voting, initial options size: %d, filtered options size: %d, average rating: %f\n",
-		len(options), len(filteredOptions), averageRating)
+	//fmt.Printf("Done voting, initial options size: %d, filtered options size: %d, average rating: %f\n",
+	//	len(options), len(filteredOptions), averageRating)
 	return filteredOptions
 }
