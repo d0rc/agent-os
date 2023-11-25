@@ -79,7 +79,7 @@ Respond in the JSON format:
 
 	finalRating := currentRating / float32(numberOfVotes)
 
-	fmt.Printf("Final rating: %f, number of votes: %d\n", finalRating, numberOfVotes)
+	//fmt.Printf("Final rating: %f, number of votes: %d\n", finalRating, numberOfVotes)
 
 	return finalRating, nil
 }

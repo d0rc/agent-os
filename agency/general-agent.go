@@ -375,6 +375,7 @@ func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Mess
 		}
 
 		messageRatings[i] = rating
+		fmt.Printf("Vote for message %d of %d finished with rating: %f\n", i, len(options), rating)
 	}
 
 	// now calculate the average rating
@@ -382,6 +383,7 @@ func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Mess
 	for _, rating := range messageRatings {
 		averageRating += rating
 	}
+	averageRating /= float32(len(messageRatings))
 
 	filteredOptions := make([]*engines.Message, 0)
 	for i, msg := range options {
