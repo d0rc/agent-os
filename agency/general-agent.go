@@ -10,7 +10,6 @@ import (
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/logrusorgru/aurora"
 	"math/rand"
-	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -200,7 +199,7 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 		chatsChannel := make(chan []*engines.Message, 16384)
 		jobs := make([]cmds.ClientRequest, 0, batchSize)
 		samplingAttempt := 0
-		maxParallelThreads := make(chan struct{}, runtime.NumCPU()-1)
+		maxParallelThreads := make(chan struct{}, 1)
 		doneChannel := make(chan struct{}, 1)
 		wg := sync.WaitGroup{}
 		go func() {
