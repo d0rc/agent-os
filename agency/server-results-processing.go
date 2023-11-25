@@ -17,7 +17,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 			return
 		case message := <-agentState.resultsProcessingChannel:
 			go func(message *engines.Message) {
-				ioRequests := agentState.TranslateToServerCalls([]*engines.Message{message})
+				ioRequests := agentState.TranslateToServerCallsAndRecordHistory([]*engines.Message{message})
 				// run all at once
 				ioResponses, err := agentState.Server.RunRequests(ioRequests, 600*time.Second)
 				if err != nil {
@@ -86,8 +86,19 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 				} else {
 					// ok, we've got the observation, lets reduce over it
 					finalResult := make(map[string]interface{})
-					tools.DocumentReduce(observation, pageResponse.Question, agentState.Server, func(s string) error {
-						return json.Unmarshal([]byte(s), &finalResult)
+					tools.DocumentReduce(observation, fmt.Sprintf(`Your goal is not everything which helps to answer the following question:
+%s
+
+Always respond in the following JSON format:
+{
+   "general-information": "write general information here",
+   "entities": [],
+   "facts": []
+}
+`, pageResponse.OriginalQuestion), agentState.Server, func(s string) error {
+						return tools.ParseJSON(s, func(x string) error {
+							return json.Unmarshal([]byte(s), &finalResult)
+						})
 					}, "")
 
 					serializedResult, err := json.Marshal(finalResult)

@@ -27,7 +27,7 @@ func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Dur
 	for idx, req := range reqs {
 		responses[idx] = make(chan *enumeratedResponse)
 		go func(req *cmds.ClientRequest, ch chan *enumeratedResponse, idx int) {
-			resp, err := c.RunRequest(req, timeout)
+			resp, err := c.RunRequest(req, timeout, REP_Default)
 			if err != nil {
 				fmt.Printf("error running request: %v\n", err)
 			}
@@ -48,19 +48,29 @@ func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Dur
 	return finalResponses, nil
 }
 
-var maxParallelRequestsChannel = make(chan struct{}, 20)
+type RequestExecutionPool int
 
-func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration) (*cmds.ServerResponse, error) {
-	if req.SpecialCaseResponse != "" {
+const (
+	REP_Default RequestExecutionPool = iota
+	REP_IO
+)
+
+var maxParallelRequestsChannel = make(chan struct{}, 1)
+
+func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
+	if req.SpecialCaseResponse != "" || isRequestEmpty(req) {
 		return &cmds.ServerResponse{
 			SpecialCaseResponse: req.SpecialCaseResponse,
 			CorrelationId:       req.CorrelationId,
 		}, nil
 	}
-	maxParallelRequestsChannel <- struct{}{}
-	defer func() {
-		<-maxParallelRequestsChannel
-	}()
+
+	if executionPool == REP_Default {
+		maxParallelRequestsChannel <- struct{}{}
+		defer func() {
+			<-maxParallelRequestsChannel
+		}()
+	}
 	client := http.Client{Timeout: timeout}
 
 	reqBytes, err := json.Marshal(req)
@@ -86,4 +96,16 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 	}
 
 	return &serverResponse, nil
+}
+
+func isRequestEmpty(req *cmds.ClientRequest) bool {
+	isEmpty := true
+	isEmpty = isEmpty && (req.GetEmbeddingsRequests == nil || len(req.GetEmbeddingsRequests) == 0)
+	isEmpty = isEmpty && (req.GetCompletionRequests == nil || len(req.GetCompletionRequests) == 0)
+	isEmpty = isEmpty && (req.GetPageRequests == nil || len(req.GetPageRequests) == 0)
+	isEmpty = isEmpty && (req.GetCacheRecords == nil || len(req.GetCacheRecords) == 0)
+	isEmpty = isEmpty && (req.SetCacheRecords == nil || len(req.SetCacheRecords) == 0)
+	isEmpty = isEmpty && (req.GoogleSearchRequests == nil || len(req.GoogleSearchRequests) == 0)
+
+	return isEmpty
 }

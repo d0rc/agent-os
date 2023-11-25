@@ -40,7 +40,7 @@ type GeneralAgentInfo struct {
 	historySize            int32
 }
 
-func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, error) {
+func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
 	return agentState.Settings.ParseResponse(response)
 }
 
@@ -54,7 +54,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		Server:                   client,
 		InputVariables:           map[string]any{},
 		History:                  make([]*engines.Message, 0),
-		jobsChannel:              make(chan *cmds.ClientRequest, 100),
+		jobsChannel:              make(chan *cmds.ClientRequest, 1),
 		resultsChannel:           make(chan *cmds.ServerResponse, 100),
 		resultsProcessingChannel: make(chan *engines.Message, 100),
 		//ioProcessingChannel:      make(chan *cmds.ClientRequest, 100),
@@ -105,7 +105,7 @@ func (agentState *GeneralAgentInfo) agentStateJobsSender() {
 			return
 		case job := <-agentState.jobsChannel:
 			go func(job *cmds.ClientRequest) {
-				resp, err := agentState.Server.RunRequest(job, 600*time.Second)
+				resp, err := agentState.Server.RunRequest(job, 600*time.Second, os_client.REP_Default)
 				if err != nil {
 					fmt.Printf("error running request: %v\n", err)
 				}
@@ -132,7 +132,6 @@ func (agentState *GeneralAgentInfo) agentStateResultsReceiver() {
 							ReplyTo: &serverResult.CorrelationId,
 							Role:    engines.ChatRoleAssistant,
 						}
-						agentState.historyAppenderChannel <- resultMessage
 						agentState.resultsProcessingChannel <- resultMessage
 					}
 				}

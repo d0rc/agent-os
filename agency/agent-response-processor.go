@@ -12,10 +12,19 @@ import (
 	"sync"
 )
 
-func (agentState *GeneralAgentInfo) TranslateToServerCalls(results []*engines.Message) []*cmds.ClientRequest {
+func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for _, res := range results {
-		parsedResults, _ := agentState.ParseResponse(res.Content)
+		parsedResults, parsedString, _ := agentState.ParseResponse(res.Content)
+		// it's only "parsedString" substring of original model response is interpretable by the system
+		msgId := engines.GenerateMessageId(parsedString)
+		agentState.historyAppenderChannel <- &engines.Message{
+			ID:       &msgId,
+			ReplyTo:  res.ReplyTo,
+			MetaInfo: res.MetaInfo,
+			Role:     res.Role,
+			Content:  parsedString,
+		}
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {

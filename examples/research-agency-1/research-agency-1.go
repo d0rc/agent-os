@@ -32,7 +32,7 @@ func main() {
 	err = agentState.GeneralAgentPipelineRun( // currentDepth
 		9,       // batchSize
 		100_000, // maxSamplingAttempts
-		81,      // minResults
+		1,       // minResults
 	)
 	if err != nil {
 		lg.Error().Err(err).

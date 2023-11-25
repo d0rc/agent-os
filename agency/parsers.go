@@ -3,7 +3,11 @@ package agency
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/d0rc/agent-os/tools"
+	"github.com/logrusorgru/aurora"
+	"strings"
+
 	//"gopkg.in/yaml.v2"
 	"gopkg.in/yaml.v3"
 	"io"
@@ -130,16 +134,36 @@ func fixMap(data map[string]interface{}) {
 	}
 }
 
-func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, error) {
+func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
+	if strings.HasSuffix(response, "},\n\t}\n}") {
+		// replace suffix with "}\n}"
+		response = response[:len(response)-7]
+		response += "}\n\t}\n}"
+	}
+	if strings.HasSuffix(response, "},\n}") {
+		// replace suffix with "}\n}"
+		response = response[:len(response)-4]
+		response += "}\n}"
+	}
 	// step one is parse JSON itself, according to the schema
 	var parsedResponse ResponseFormatType
+	var parsedString string
 	err := tools.ParseJSON(response, func(response string) error {
+		parsedString = response
 		return json.Unmarshal([]byte(response), &parsedResponse)
 	})
 	if err != nil {
-		return nil, err
+		return nil, parsedString, err
 	}
 
+	parsedString = strings.TrimSpace(parsedString)
+
+	if len(response)-len(parsedString) > 100 {
+		fmt.Printf("Parsed string: ```\n%s\n```\nOriginal len: %d, parsed len: %d\n",
+			aurora.BrightGreen(parsedString),
+			len(response),
+			len(parsedString))
+	}
 	results := make([]*ResponseParserResult, 0)
 
 	// pick data according to configured parsers
@@ -184,5 +208,5 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		}
 	}
 
-	return results, nil
+	return results, parsedString, nil
 }

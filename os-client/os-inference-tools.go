@@ -13,7 +13,7 @@ func ProcessGetCompletions(request []cmds.GetCompletionRequest, ctx *AgentOSClie
 		GetCompletionRequests: request,
 		ProcessName:           process,
 		Priority:              priority,
-	}, 120*time.Second)
+	}, 120*time.Second, REP_Default)
 	if err != nil {
 		return nil, err
 	}

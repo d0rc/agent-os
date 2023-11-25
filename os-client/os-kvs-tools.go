@@ -16,7 +16,7 @@ func (c *AgentOSClient) GetTaskCachedResult(namespace, key string) ([]byte, erro
 				Key:       documentId,
 			},
 		},
-	}, 60*time.Second)
+	}, 60*time.Second, REP_IO)
 
 	if err != nil {
 		return nil, err
@@ -39,7 +39,7 @@ func (c *AgentOSClient) SetTaskCachedResult(namespace, key string, result []byte
 				Value:     result,
 			},
 		},
-	}, 60*time.Second)
+	}, 60*time.Second, REP_IO)
 
 	if err != nil {
 		return err
