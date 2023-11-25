@@ -7,12 +7,24 @@ import (
 	"github.com/d0rc/agent-os/cmds"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
+	"strconv"
+	"sync"
 	"time"
 )
 
 // VoteForAction it's going to be very different from what ancient Greeks thought it should be
 // and that's the reason for the file name, nothing else
+var votesCache = make(map[string]float32)
+var votesCacheLock = sync.RWMutex{}
+
 func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription string) (float32, error) {
+	votesCacheLock.RLock()
+	if _, exists := votesCache[actionDescription]; exists {
+		votesCacheLock.RUnlock()
+		return votesCache[actionDescription], nil
+	}
+	votesCacheLock.RUnlock()
+
 	systemMessage := `Given goal:
 
 %s
@@ -32,10 +44,10 @@ Respond in the JSON format:
 
 	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n")
 	type votersResponse struct {
-		Thought   string  `json:"thought"`
-		Criticism string  `json:"criticism"`
-		Feedback  string  `json:"feedback"`
-		Rate      float32 `json:"rate"`
+		Thought   string      `json:"thought"`
+		Criticism string      `json:"criticism"`
+		Feedback  string      `json:"feedback"`
+		Rate      interface{} `json:"rate"`
 	}
 
 	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
@@ -71,8 +83,24 @@ Respond in the JSON format:
 				fmt.Printf("error parsing voter's JSON: %s\n", err)
 				continue
 			}
+			var currentVoteRate float32
 
-			currentRating += currentVote.Rate
+			switch currentVote.Rate.(type) {
+			case float32:
+				currentVoteRate = currentVote.Rate.(float32)
+			case float64:
+				currentVoteRate = float32(currentVote.Rate.(float64))
+			case string:
+				tmp, err := strconv.ParseFloat(currentVote.Rate.(string), 32)
+				if err != nil {
+					fmt.Printf("error parsing vote rate: %s\n", err)
+					continue
+				}
+				currentVoteRate = float32(tmp)
+			case int:
+				currentVoteRate = float32(currentVote.Rate.(int))
+			}
+			currentRating += currentVoteRate
 			numberOfVotes++
 		}
 	}
@@ -80,6 +108,12 @@ Respond in the JSON format:
 	finalRating := currentRating / float32(numberOfVotes)
 
 	//fmt.Printf("Final rating: %f, number of votes: %d\n", finalRating, numberOfVotes)
+
+	if numberOfVotes >= 5 {
+		votesCacheLock.Lock()
+		votesCache[actionDescription] = finalRating
+		votesCacheLock.Unlock()
+	}
 
 	return finalRating, nil
 }
