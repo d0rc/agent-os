@@ -25,6 +25,15 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			Role:     res.Role,
 			Content:  parsedString,
 		}
+		// let's go to cross roads here, to see if we should dive deeper here
+		voteRating, err := agentState.VoteForAction(agentState.Settings.GetAgentInitialGoal(), parsedString)
+		if err != nil {
+			fmt.Printf("Error voting for action: %v\n", err)
+			continue
+		}
+		if voteRating < 8.0 {
+			continue
+		}
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {

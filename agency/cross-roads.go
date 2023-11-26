@@ -3,7 +3,6 @@ package agency
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/engines"
-	"strings"
 )
 
 func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Message) []*engines.Message {
@@ -24,9 +23,7 @@ func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Mess
 		return options
 	}
 
-	prompt := agentState.Settings.Agent.PromptBased.Prompt
-	promptLines := strings.Split(prompt, "\n")
-	initialGoal := promptLines[0]
+	initialGoal := agentState.Settings.GetAgentInitialGoal()
 	messageRatings := make([]float32, len(options))
 
 	for i, msg := range options {

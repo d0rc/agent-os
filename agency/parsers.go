@@ -114,6 +114,11 @@ func (settings *AgentSettings) GetResponseJSONFormat() string {
 	return settings.Agent.renderedJson
 }
 
+func (settings *AgentSettings) GetAgentInitialGoal() string {
+	promptLines := strings.Split(settings.Agent.PromptBased.Prompt, "\n")
+	return promptLines[0]
+}
+
 func fixMap(data map[string]interface{}) {
 	for k, v := range data {
 		switch v := v.(type) {
