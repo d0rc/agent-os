@@ -14,7 +14,7 @@ import (
 
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
-	for _, res := range results {
+	for resIdx, res := range results {
 		parsedResults, parsedString, _ := agentState.ParseResponse(res.Content)
 		// it's only "parsedString" substring of original model response is interpretable by the system
 		msgId := engines.GenerateMessageId(parsedString)
@@ -31,7 +31,8 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			fmt.Printf("Error voting for action: %v\n", err)
 			continue
 		}
-		if voteRating < 8.0 {
+		if voteRating < 6.0 {
+			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
 			continue
 		}
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
