@@ -4,7 +4,7 @@
     prompt-based:
       # You are default mode network of an AI agent. Do whatever you feel to be right thing to do while agent is idle.
       prompt: >
-        You are military grade research AI working on US government. Your current objective is to create a list of top restaurants in Milan, Italy. Search in Italian language.
+        You are AI agent, your goal is to find a restaurant in Milan, Italy in which ostrich meat (carne di struzzo) can be tasted on a regular basis. Search in Italian language.
 
         Available tools:
         

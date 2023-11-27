@@ -107,12 +107,17 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 }
 
 func (agentState *GeneralAgentInfo) agentStateJobsSender() {
+	maxJobThreads := make(chan struct{}, 4)
 	for {
 		select {
 		case <-agentState.quitChannelJobs:
 			return
 		case job := <-agentState.jobsChannel:
 			go func(job *cmds.ClientRequest) {
+				maxJobThreads <- struct{}{}
+				defer func() {
+					<-maxJobThreads
+				}()
 				resp, err := agentState.Server.RunRequest(job, 600*time.Second, os_client.REP_Default)
 				if err != nil {
 					fmt.Printf("error running request: %v\n", err)

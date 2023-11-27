@@ -70,10 +70,10 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 				Temperature: 0.8,
 				StopTokens:  []string{"###"},
 				MinResults:  minResults,
-				BestOf:      3,
-				MaxResults:  1,
+				//BestOf:      3,
+				MaxResults: 1,
 			},
-		}, ctx, "document-reduce", borrow_engine.PRIO_User)
+		}, ctx, "document-reduce", borrow_engine.PRIO_System)
 		minResults = 100 // next time we want all results, when making retry
 
 		if err != nil {
@@ -92,9 +92,9 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 			tmp_currentSummary := strings.TrimSpace(currentSummaryChoice)
 			parserErr := parser(tmp_currentSummary)
 			if parserErr != nil {
-				fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
-					aurora.BrightYellow(retryCounter),
-					aurora.BrightRed(tmp_currentSummary))
+				//fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
+				//	aurora.BrightYellow(retryCounter),
+				//	aurora.BrightRed(tmp_currentSummary))
 				whichWayToGo[summaryChoiceIdx] = false
 			} else {
 				whichWayToGo[summaryChoiceIdx] = true

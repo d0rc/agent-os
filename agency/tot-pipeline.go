@@ -73,7 +73,7 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 	path = append(path, msg)
 	replies := ctx.RepliesMap[*msg.ID]
 
-	if len(replies) == 0 {
+	if len(replies) == 0 || len(path) > 7 {
 		// Terminal message reached, execute callback
 		callback(path)
 		return

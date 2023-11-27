@@ -125,7 +125,9 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		sectionString := section.(string)
 
 		notesLock.Lock()
-		notes[sectionString] = make([]string, 0)
+		if notes[sectionString] == nil {
+			notes[sectionString] = make([]string, 0)
+		}
 		switch text.(type) {
 		case string:
 			notes[sectionString] = append(notes[sectionString], text.(string))
