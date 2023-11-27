@@ -15,7 +15,10 @@ import (
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for resIdx, res := range results {
-		parsedResults, parsedString, _ := agentState.ParseResponse(res.Content)
+		parsedResults, parsedString, err := agentState.ParseResponse(res.Content)
+		if err != nil {
+			continue
+		}
 		// it's only "parsedString" substring of original model response is interpretable by the system
 		msgId := engines.GenerateMessageId(parsedString)
 		agentState.historyAppenderChannel <- &engines.Message{

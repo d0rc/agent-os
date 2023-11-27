@@ -141,18 +141,20 @@ func (ctx *Context) Start(onStart func(ctx *Context)) {
 		go ctx.ComputeRouter.Run()
 		detectedComputes := make([]chan *borrow_engine.InferenceNode, 0, len(ctx.Config.Compute))
 		for _, node := range ctx.Config.Compute {
-			ctx.Log.Info().Str("url", node.Endpoint).Msg("adding compute node")
+			ctx.Log.Info().Msgf("adding compute node: %s", node.Endpoint)
 			detectedComputes = append(detectedComputes, ctx.ComputeRouter.AddNode(&borrow_engine.InferenceNode{
 				EndpointUrl:           node.Endpoint,
 				EmbeddingsEndpointUrl: node.EmbeddingsEndpoint,
 				MaxRequests:           node.MaxRequests,
 				MaxBatchSize:          node.MaxBatchSize,
 				JobTypes:              translateJobTypes(node.JobTypes),
+				Protocol:              node.Type,
+				Token:                 node.Token,
 			}))
 		}
 		for _, ch := range detectedComputes {
 			gotNode := <-ch
-			ctx.Log.Info().Str("url", gotNode.EndpointUrl).Msg("compute node autodetected")
+			ctx.Log.Info().Msgf("compute node auto-detected: %s", gotNode.EndpointUrl)
 		}
 	} else {
 		ctx.Log.Warn().Msg("no compute section in config")

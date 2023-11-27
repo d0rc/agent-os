@@ -68,6 +68,8 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 		LeasedAt:              time.Time{},
 		Busy:                  false,
 		EmbeddingsDims:        nil,
+		Protocol:              node.Protocol,
+		Token:                 node.Token,
 	}
 	autodetectFinished := make(chan *InferenceNode, 1)
 	go func(node *InferenceNode) {

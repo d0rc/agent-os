@@ -24,6 +24,8 @@ type InferenceNode struct {
 	TotalRequestsFailed uint64
 	TotalJobsFailed     uint64
 	LastFailure         time.Time
+	Protocol            string
+	Token               string
 }
 
 func (n InferenceNode) RunBatch(cf ComputeFunction, jobs []*ComputeJob, nodeIdx int,

@@ -20,8 +20,9 @@ var votesCacheLock = sync.RWMutex{}
 func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription string) (float32, error) {
 	votesCacheLock.RLock()
 	if _, exists := votesCache[actionDescription]; exists {
+		voteValue := votesCache[actionDescription]
 		votesCacheLock.RUnlock()
-		return votesCache[actionDescription], nil
+		return voteValue, nil
 	}
 	votesCacheLock.RUnlock()
 
@@ -50,13 +51,15 @@ Respond in the JSON format:
 		Rate      interface{} `json:"rate"`
 	}
 
+	minResults := 7
+retryVoting:
 	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
 		Priority:    borrow_engine.PRIO_User,
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
 				RawPrompt:  systemMessage,
-				MinResults: 5,
+				MinResults: minResults,
 			},
 		},
 	}, 120*time.Second, os_client.REP_IO)
@@ -76,6 +79,9 @@ Respond in the JSON format:
 		}
 
 		for _, choice := range getCompletionResponse.Choices {
+			if choice == "" {
+				continue
+			}
 			currentVote := &votersResponse{}
 			if err := tools.ParseJSON(choice, func(s string) error {
 				return json.Unmarshal([]byte(s), currentVote)
@@ -99,10 +105,29 @@ Respond in the JSON format:
 				currentVoteRate = float32(tmp)
 			case int:
 				currentVoteRate = float32(currentVote.Rate.(int))
+			default:
+				fmt.Printf("Don't know what to do with vote rate: %v\n", currentVote.Rate)
+			}
+			if currentVoteRate >= 0 && currentVoteRate <= 1 {
+				fmt.Printf("Strange - Vote rate: %f\n", currentVoteRate)
 			}
 			currentRating += currentVoteRate
 			numberOfVotes++
 		}
+	}
+
+	if minResults < len(serverResponse.GetCompletionResponse[0].Choices) {
+		minResults = len(serverResponse.GetCompletionResponse[0].Choices) + 1
+	}
+
+	if numberOfVotes == 0 && minResults < 50 {
+		minResults += 5
+		goto retryVoting
+	}
+
+	if numberOfVotes == 0 {
+		numberOfVotes = 100
+		currentRating = 0
 	}
 
 	finalRating := currentRating / float32(numberOfVotes)

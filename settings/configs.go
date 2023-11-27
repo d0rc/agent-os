@@ -31,6 +31,7 @@ type ConfigurationFile struct {
 		MaxBatchSize       int      `yaml:"max-batch-size"`
 		MaxRequests        int      `yaml:"max-requests"`
 		JobTypes           []string `yaml:"job-types"`
+		Token              string   `yaml:"token"`
 	} `yaml:"compute"`
 }
 

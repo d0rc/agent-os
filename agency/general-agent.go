@@ -10,6 +10,7 @@ import (
 	pongo2 "github.com/flosch/pongo2/v6"
 	"github.com/logrusorgru/aurora"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -35,8 +36,12 @@ type GeneralAgentInfo struct {
 	//quitIoProcessing         chan struct{}
 	//ioProcessingChannel      chan *cmds.ClientRequest
 	historyAppenderChannel chan *engines.Message
-	quitHistoryAppeneder   chan struct{}
+	quitHistoryAppender    chan struct{}
 	historySize            int32
+
+	terminalsLock      sync.RWMutex
+	terminalsVisitsMap map[string]int
+	terminalsVotesMap  map[string]float32
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
@@ -62,7 +67,11 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		quitChannelResults:     make(chan struct{}, 1),
 		quitChannelProcessing:  make(chan struct{}, 1),
 		//quitIoProcessing:         make(chan struct{}, 1),
-		quitHistoryAppeneder: make(chan struct{}, 1),
+		quitHistoryAppender: make(chan struct{}, 1),
+
+		terminalsVisitsMap: make(map[string]int),
+		terminalsVotesMap:  make(map[string]float32),
+		terminalsLock:      sync.RWMutex{},
 	}
 
 	go agentState.agentStateJobsSender()
@@ -77,7 +86,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 func (agentState *GeneralAgentInfo) historyAppender() {
 	for {
 		select {
-		case <-agentState.quitHistoryAppeneder:
+		case <-agentState.quitHistoryAppender:
 			return
 		case message := <-agentState.historyAppenderChannel:
 			// let's see if message already in the History
@@ -143,7 +152,7 @@ func (agentState *GeneralAgentInfo) Stop() {
 	agentState.quitChannelJobs <- struct{}{}
 	agentState.quitChannelResults <- struct{}{}
 	agentState.quitChannelProcessing <- struct{}{}
-	agentState.quitHistoryAppeneder <- struct{}{}
+	agentState.quitHistoryAppender <- struct{}{}
 }
 
 // GeneralAgentPipelineRun engine inference schema:
@@ -173,24 +182,9 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 	}
 
 	for {
-		tpl, err := pongo2.FromString(agentState.Settings.Agent.PromptBased.Prompt)
+		systemMessage, err := agentState.getSystemMessage()
 		if err != nil {
-			return fmt.Errorf("error parsing agent's prompt: %v", err)
-		}
-
-		contextString, err := tpl.Execute(agentState.InputVariables)
-		if err != nil {
-			return fmt.Errorf("error executing agent's prompt: %v", err)
-		}
-		// result is a System message...!
-		responseFormat := agentState.Settings.GetResponseJSONFormat()
-
-		contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
-		messageId := engines.GenerateMessageId(contextString)
-		systemMessage := &engines.Message{
-			Role:    engines.ChatRoleSystem,
-			Content: contextString,
-			ID:      &messageId,
+			return err
 		}
 
 		searchTs := time.Now()
@@ -199,7 +193,7 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 		chatsChannel := make(chan []*engines.Message, 16384)
 		jobs := make([]cmds.ClientRequest, 0, batchSize)
 		samplingAttempt := 0
-		maxParallelThreads := make(chan struct{}, 1)
+		maxParallelThreads := make(chan struct{}, runtime.NumCPU()-1)
 		doneChannel := make(chan struct{}, 1)
 		wg := sync.WaitGroup{}
 		go func() {
@@ -347,6 +341,77 @@ func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
 	return nil
 }
 
+func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error) {
+	tpl, err := pongo2.FromString(agentState.Settings.Agent.PromptBased.Prompt)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing agent's prompt: %v", err)
+	}
+
+	contextString, err := tpl.Execute(agentState.InputVariables)
+	if err != nil {
+		return nil, fmt.Errorf("error executing agent's prompt: %v", err)
+	}
+	// result is a System message...!
+	responseFormat := agentState.Settings.GetResponseJSONFormat()
+
+	contextString = fmt.Sprintf("%s\nRespond always in JSON format:\n%s\n", contextString, responseFormat)
+	messageId := engines.GenerateMessageId(contextString)
+	systemMessage := &engines.Message{
+		Role:    engines.ChatRoleSystem,
+		Content: contextString,
+		ID:      &messageId,
+	}
+	return systemMessage, nil
+}
+
+func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Message) {
+	// first let's check how many times we've been here
+	chainSignature := getChatSignature(messages)
+
+	agentState.terminalsLock.Lock()
+	defer agentState.terminalsLock.Unlock()
+
+	timesVisited, exists := agentState.terminalsVisitsMap[chainSignature]
+	if exists && timesVisited > 5 {
+		// we've been here more than 5 times, let's remove it
+		return
+	}
+
+	votesRating, exists := agentState.terminalsVotesMap[chainSignature]
+	if exists && votesRating < 5.0 {
+		// it's not worth visiting at all
+		return
+	}
+
+	// in any other case - start voting...!
+	if messages[len(messages)-1].Role == engines.ChatRoleAssistant {
+		votes, err := agentState.VoteForAction(messages[0].Content, messages[len(messages)-1].Content)
+		if err != nil {
+			return
+		}
+
+		agentState.terminalsVotesMap[chainSignature] = votes
+		agentState.terminalsVisitsMap[chainSignature] = timesVisited + 1
+	} else {
+		agentState.terminalsVotesMap[chainSignature] = 10 // it's real-world input, don't ignore just yet...!
+		agentState.terminalsVisitsMap[chainSignature] = timesVisited + 1
+	}
+
+	// if we've got here, we can go on...!
+	agentState.jobsChannel <- &cmds.ClientRequest{
+		ProcessName: agentState.SystemName,
+		Priority:    borrow_engine.PRIO_User,
+		GetCompletionRequests: []cmds.GetCompletionRequest{
+			{
+				RawPrompt:   chatToRawPrompt(messages),
+				MinResults:  8,
+				Temperature: 0.9,
+			},
+		},
+		CorrelationId: *messages[len(messages)-1].ID,
+	}
+}
+
 func deDupeChats(chats [][]*engines.Message) [][]*engines.Message {
 	chatSignatures := make(map[string]struct{})
 	deDupedChats := make([][]*engines.Message, 0)
@@ -392,7 +457,7 @@ func chatToRawPrompt(sample []*engines.Message) string {
 	return rawPrompt.String()
 }
 
-var source = rand.NewSource(0)
+var source = rand.NewSource(1)
 var rng = rand.New(source)
 var rngLock = sync.RWMutex{}
 

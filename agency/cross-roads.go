@@ -50,12 +50,12 @@ func (agentState *GeneralAgentInfo) applyCrossRoadsMagic(options []*engines.Mess
 
 	filteredOptions := make([]*engines.Message, 0)
 	for i, msg := range options {
-		if messageRatings[i] >= min(8.0, maxRating) {
+		if messageRatings[i] >= min(6.0, maxRating) {
 			filteredOptions = append(filteredOptions, msg)
 		}
 	}
 
-	//fmt.Printf("Done voting, initial options size: %d, filtered options size: %d, average rating: %f\n",
-	//	len(options), len(filteredOptions), averageRating)
+	fmt.Printf("Done voting, initial options size: %d, filtered options size: %d, average rating: %f\n",
+		len(options), len(filteredOptions), averageRating)
 	return filteredOptions
 }

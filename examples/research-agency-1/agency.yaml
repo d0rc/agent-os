@@ -4,7 +4,7 @@
     prompt-based:
       # You are default mode network of an AI agent. Do whatever you feel to be right thing to do while agent is idle.
       prompt: >
-        You are military grade research AI agent working on US government. Your current objective is to find a personal assistant for our field agent under cover. Make sure you only hire humans not virtual assistants. Our field agent's legend is - he is software developer. Knowledge of Russian and Italian languages is an absolute requirement. Perfect candidate should be able to streamline restaurants bookings, buy home appliances, organize minor repairs in the apartment, etc. Figure out other requirements yourself. Search in Italian language.
+        You are military grade research AI working on US government. Your current objective is to create a list of top restaurants in Milan, Italy. Search in Italian language.
 
         Available tools:
         

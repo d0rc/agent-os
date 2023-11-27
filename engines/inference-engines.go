@@ -64,6 +64,8 @@ type RemoteInferenceEngine struct {
 	EmbeddingsDims        *uint64
 	CompletionFailed      bool
 	EmbeddingsFailed      bool
+	Protocol              string
+	Token                 string
 }
 
 func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {

@@ -3,9 +3,7 @@ package agency
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"github.com/d0rc/agent-os/tools"
-	"github.com/logrusorgru/aurora"
 	"strings"
 
 	//"gopkg.in/yaml.v2"
@@ -158,16 +156,16 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		return json.Unmarshal([]byte(response), &parsedResponse)
 	})
 	if err != nil {
-		return nil, parsedString, err
+		return nil, "", err
 	}
 
 	parsedString = strings.TrimSpace(parsedString)
 
 	if len(response)-len(parsedString) > 100 {
-		fmt.Printf("Parsed string: ```\n%s\n```\nOriginal len: %d, parsed len: %d\n",
-			aurora.BrightGreen(parsedString),
-			len(response),
-			len(parsedString))
+		// fmt.Printf("Parsed string: ```\n%s\n```\nOriginal len: %d, parsed len: %d\n",
+		//	aurora.BrightGreen(parsedString),
+		//	len(response),
+		//	len(parsedString))
 	}
 	results := make([]*ResponseParserResult, 0)
 
