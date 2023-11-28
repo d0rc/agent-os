@@ -101,10 +101,14 @@ Always respond in the following JSON format:
    "entities": [],
    "facts": []
 }
-`, pageResponse.OriginalQuestion), agentState.Server, func(s string) error {
-						return tools.ParseJSON(s, func(x string) error {
+`, pageResponse.OriginalQuestion), agentState.Server, func(s string) (string, error) {
+						ps := ""
+						err := tools.ParseJSON(s, func(x string) error {
+							ps = x
 							return json.Unmarshal([]byte(s), &finalResult)
 						})
+
+						return ps, err
 					}, "")
 
 					serializedResult, err := json.Marshal(finalResult)

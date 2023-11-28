@@ -199,7 +199,23 @@ func ignoreDataUrls(content string, selec *goquery.Selection, opt *md.Options) *
 }
 
 func renderMarkdown(rawData string) (string, error) {
-	convertor := md.NewConverter("", true, nil)
+	opt := &md.Options{
+		GetAbsoluteURL: func(selector *goquery.Selection, rawURL string, domain string) string {
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				// we can't do anything with this url because it is invalid
+				return rawURL
+			}
+			if u.Scheme == "data" {
+				// Custom logic for data URLs
+				// For example, you can modify the URL, return a different URL, etc.
+				return ""
+			}
+			// Default logic for other URLs
+			return md.DefaultGetAbsoluteURL(selector, rawURL, domain)
+		},
+	}
+	convertor := md.NewConverter("", true, opt)
 	convertor.AddRules(md.Rule{
 		Filter:      []string{"img"},
 		Replacement: ignoreDataUrls,

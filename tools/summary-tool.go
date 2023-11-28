@@ -28,7 +28,7 @@ func DocumentReduceGetCached(document, question string, ctx *server.Context) (st
 	return "", false
 }
 
-func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, parser func(string) error, model string) string {
+func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, parser func(string) (string, error), model string) string {
 	if len(document) == 0 {
 		return ""
 	}
@@ -57,15 +57,17 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 		tmp, err := os_client.ProcessGetCompletions([]cmds.GetCompletionRequest{
 			{
 				RawPrompt: fmt.Sprintf(`
-### System: %s
 ### User: Source data:
 
 %s
 
 %s
 
+%s
 ### Assistant:
-`, systemPrompt, strings.TrimSpace(snippet), strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))),
+`, strings.TrimSpace(snippet),
+					strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:")),
+					systemPrompt),
 				Model:       model,
 				Temperature: 0.8,
 				StopTokens:  []string{"###"},
@@ -90,7 +92,7 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 		success = false
 		for summaryChoiceIdx, currentSummaryChoice := range tmp.GetCompletionResponse[0].Choices {
 			tmp_currentSummary := strings.TrimSpace(currentSummaryChoice)
-			parserErr := parser(tmp_currentSummary)
+			parsedString, parserErr := parser(tmp_currentSummary)
 			if parserErr != nil {
 				//fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
 				//	aurora.BrightYellow(retryCounter),
@@ -98,7 +100,9 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 				whichWayToGo[summaryChoiceIdx] = false
 			} else {
 				whichWayToGo[summaryChoiceIdx] = true
-				currentSummary = tmp_currentSummary
+				// parsedString contains final parsed JSON
+
+				currentSummary = parsedString
 				success = true
 				break
 				// break ...?
