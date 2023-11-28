@@ -7,16 +7,22 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
+	"runtime"
 	"time"
 )
 
 func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
+	maxIoRequestsChan := make(chan struct{}, runtime.NumCPU()-2)
 	for {
 		select {
 		case <-agentState.quitChannelProcessing:
 			return
 		case message := <-agentState.resultsProcessingChannel:
 			go func(message *engines.Message) {
+				maxIoRequestsChan <- struct{}{}
+				defer func() {
+					<-maxIoRequestsChan
+				}()
 				ioRequests := agentState.TranslateToServerCallsAndRecordHistory([]*engines.Message{message})
 				// run all at once
 				ioResponses, err := agentState.Server.RunRequests(ioRequests, 600*time.Second)

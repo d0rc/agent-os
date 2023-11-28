@@ -20,7 +20,7 @@
         
         - list-notes - use it get names of last 50 notes you've made;
         
-        - speak - use it to prey for a solution, name: "speak", args: "text": "something to say, operator can hear you, include relevant context otherwise operator will ignore your message".
+        - final-report - use it to deliver the solution, name: "final-report", args: "text": "solution with all the useful details, including URLs, names, section titles, etc.".
 
 
         Constraints:

@@ -369,7 +369,7 @@ func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error)
 	return systemMessage, nil
 }
 
-func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Message) {
+func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Message) bool {
 	// first let's check how many times we've been here
 	chainSignature := getChatSignature(messages)
 
@@ -379,24 +379,27 @@ func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Mes
 	timesVisited, exists := agentState.terminalsVisitsMap[chainSignature]
 	if exists && timesVisited > 5 {
 		// we've been here more than 5 times, let's remove it
-		return
+		return false
 	}
 
 	votesRating, exists := agentState.terminalsVotesMap[chainSignature]
 	if exists && votesRating < 5.0 {
 		// it's not worth visiting at all
-		return
+		return false
 	}
 
 	// in any other case - start voting...!
 	if messages[len(messages)-1].Role == engines.ChatRoleAssistant {
-		votes, err := agentState.VoteForAction(messages[0].Content, messages[len(messages)-1].Content)
-		if err != nil {
-			return
-		}
+		/*
+			votes, err := agentState.VoteForAction(messages[0].Content, messages[len(messages)-1].Content)
+			if err != nil {
+				return
+			}
 
-		agentState.terminalsVotesMap[chainSignature] = votes
-		agentState.terminalsVisitsMap[chainSignature] = timesVisited + 1
+			agentState.terminalsVotesMap[chainSignature] = votes
+			agentState.terminalsVisitsMap[chainSignature] = timesVisited + 1
+		*/
+		return false
 	} else {
 		agentState.terminalsVotesMap[chainSignature] = 10 // it's real-world input, don't ignore just yet...!
 		agentState.terminalsVisitsMap[chainSignature] = timesVisited + 1
@@ -415,6 +418,8 @@ func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Mes
 		},
 		CorrelationId: *messages[len(messages)-1].ID,
 	}
+
+	return true
 }
 
 func deDupeChats(chats [][]*engines.Message) [][]*engines.Message {

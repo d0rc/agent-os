@@ -100,6 +100,7 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 				whichWayToGo[summaryChoiceIdx] = true
 				currentSummary = tmp_currentSummary
 				success = true
+				break
 				// break ...?
 			}
 		}

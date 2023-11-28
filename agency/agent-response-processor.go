@@ -174,7 +174,7 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 			clientRequest.SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
 		}
 		notesLock.RUnlock()
-	case "speak":
+	case "final-report":
 		question := args["text"]
 		switch question.(type) {
 		case string:

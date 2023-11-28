@@ -23,16 +23,23 @@ func (agentState *GeneralAgentInfo) totPipelineStep() error {
 	// which lead to terminal messages
 	fmt.Printf("Starting to traverse agentState.History(%d) and find all paths\n", len(agentState.History))
 	terminalMessages := 0
+	jobsSubmitted := 0
 	traverseAndExecute(*systemMessage.ID, append(agentState.History, systemMessage), func(messages []*engines.Message) {
-		if len(messages) > 7 {
+		if len(messages) > 3 {
 			return
 		}
 		terminalMessages++
 		//fmt.Printf("Got path of length %d\n", len(messages))
-		agentState.visitTerminalMessage(messages)
+		if agentState.visitTerminalMessage(messages) {
+			jobsSubmitted++
+		}
 	})
 
-	fmt.Printf("Done in %v, found %d terminal messages\n", time.Since(ts), terminalMessages)
+	fmt.Printf("Done in %v, found %d terminal messages, jobs submitted: %d\n",
+		time.Since(ts), terminalMessages, jobsSubmitted)
+	if jobsSubmitted == 0 {
+		time.Sleep(5 * time.Second)
+	}
 	return nil
 }
 
