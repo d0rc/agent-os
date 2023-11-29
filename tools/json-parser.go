@@ -34,12 +34,13 @@ func ParseJSON(sourceData string, parser func(string) error) error {
 		return err
 	}
 
-	for minPosition := 1; minPosition < len(sourceData)-1; minPosition++ {
-		err = actualParse(sourceData[minPosition-1:], parser)
-		if err == nil {
-			return nil
-		}
-	}
+	/*
+		for minPosition := 1; minPosition < len(sourceData)-1; minPosition++ {
+			err = actualParse(sourceData[minPosition-1:], parser)
+			if err == nil {
+				return nil
+			}
+		}*/
 
 	return err
 }

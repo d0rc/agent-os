@@ -8,15 +8,18 @@ import (
 
 func (agentState *GeneralAgentInfo) ToTPipeline() {
 	for {
-		agentState.totPipelineStep()
+		jobsSent, _ := agentState.totPipelineStep()
+		if jobsSent == 0 {
+			time.Sleep(5000 * time.Millisecond)
+		}
 	}
 }
 
-func (agentState *GeneralAgentInfo) totPipelineStep() error {
+func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 	ts := time.Now()
 	systemMessage, err := agentState.getSystemMessage()
 	if err != nil {
-		return fmt.Errorf("error getting system message: %v", err)
+		return 0, fmt.Errorf("error getting system message: %v", err)
 	}
 
 	// traverse agentState.History and find all paths
@@ -24,23 +27,21 @@ func (agentState *GeneralAgentInfo) totPipelineStep() error {
 	fmt.Printf("Starting to traverse agentState.History(%d) and find all paths\n", len(agentState.History))
 	terminalMessages := 0
 	jobsSubmitted := 0
+	lengthStats := make(map[int]int)
+	//finalMessageCommand := make(map[string]int)
+	//finalMessageRating := make(map[int]int)
 	traverseAndExecute(*systemMessage.ID, append(agentState.History, systemMessage), func(messages []*engines.Message) {
-		if len(messages) > 3 {
-			return
-		}
 		terminalMessages++
+		lengthStats[len(messages)]++
 		//fmt.Printf("Got path of length %d\n", len(messages))
 		if agentState.visitTerminalMessage(messages) {
 			jobsSubmitted++
 		}
 	})
 
-	fmt.Printf("Done in %v, found %d terminal messages, jobs submitted: %d\n",
-		time.Since(ts), terminalMessages, jobsSubmitted)
-	if jobsSubmitted == 0 {
-		time.Sleep(5 * time.Second)
-	}
-	return nil
+	fmt.Printf("Done in %v, found %d terminal messages, jobs submitted: %d, length stats: %v\n",
+		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
+	return jobsSubmitted, nil
 }
 
 // CallbackFunctionType is the type for callback functions
@@ -80,8 +81,14 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 	path = append(path, msg)
 	replies := ctx.RepliesMap[*msg.ID]
 
-	if len(replies) == 0 || len(path) > 7 {
+	if len(replies) == 0 || len(path) > 13 {
 		// Terminal message reached, execute callback
+		callback(path)
+		return
+	}
+
+	if len(replies) < 4 {
+		// we can still find something interesting on this step
 		callback(path)
 		return
 	}

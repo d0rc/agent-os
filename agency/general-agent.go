@@ -8,10 +8,7 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
-	"github.com/logrusorgru/aurora"
 	"math/rand"
-	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -160,192 +157,6 @@ func (agentState *GeneralAgentInfo) Stop() {
 	agentState.quitHistoryAppender <- struct{}{}
 }
 
-// GeneralAgentPipelineRun engine inference schema:
-// make inference:
-//   - create context
-//   - append known messages from current history
-//   - get inference result
-//
-// if it's not an api call, use observation pipeline
-// if it's an observation call - use observation pipeline
-// if it's a context modification api call:
-//   - fork agent and history context
-//   - use observation pipeline
-//
-// an observation pipeline:
-//   - append observation and toggle next inference
-//   - retry current generation if limit of success runs is not reached
-func (agentState *GeneralAgentInfo) GeneralAgentPipelineRun(
-	batchSize, // try to create this many jobs
-	maxSamplingAttempts, // how many times we can try to sample `batchSize` jobs
-	minResults int, // how many inference results before using only cached inference
-) error {
-	// let's get context right
-	if agentState.Settings == nil || agentState.Settings.Agent == nil || agentState.Settings.Agent.PromptBased == nil ||
-		agentState.Settings.Agent.PromptBased.Prompt == "" {
-		return fmt.Errorf("not a pormpt-based agent - empty prompt in agent settings")
-	}
-
-	for {
-		systemMessage, err := agentState.getSystemMessage()
-		if err != nil {
-			return err
-		}
-
-		searchTs := time.Now()
-		// ok, now, we always start with system message
-		chats := make([][]*engines.Message, 0, batchSize)
-		chatsChannel := make(chan []*engines.Message, 16384)
-		jobs := make([]cmds.ClientRequest, 0, batchSize)
-		samplingAttempt := 0
-		maxParallelThreads := make(chan struct{}, runtime.NumCPU()-1)
-		doneChannel := make(chan struct{}, 1)
-		wg := sync.WaitGroup{}
-		go func() {
-			for {
-				samplingAttempt++
-				maxParallelThreads <- struct{}{}
-				wg.Add(1)
-				chatsFound := int32(0)
-				go func() {
-					defer func() {
-						<-maxParallelThreads
-						wg.Done()
-					}()
-					chat := make([]*engines.Message, 0)
-					chat = append(chat, systemMessage)
-					for {
-						options := make([]*engines.Message, 0)
-						for _, msg := range agentState.History {
-							if *msg.ReplyTo == *chat[len(chat)-1].ID {
-								options = append(options, msg)
-							}
-						}
-						// ok, now we have len(options) messages to choose from
-						if len(options) == 0 {
-							// it's the end of the thread, continue to the next one
-							break
-						}
-						// pick a random message from options
-						// let's see if these messages are agent's action choices...
-						options = agentState.applyCrossRoadsMagic(options)
-						messageToAdd := options[randomInt(len(options))]
-						chat = append(chat, messageToAdd)
-					}
-
-					if chat == nil || len(chat) == 0 {
-						return
-					}
-					if chat[len(chat)-1].Role != engines.ChatRoleAssistant {
-						// chats = append(chats, chat)
-						chatsChannel <- chat
-						atomic.AddInt32(&chatsFound, 1)
-					}
-				}()
-
-				if samplingAttempt > maxSamplingAttempts {
-					doneChannel <- struct{}{}
-					if atomic.LoadInt32(&chatsFound) == 0 {
-						// we've failed to find any chat to continue with
-						// let's try from system message again
-						chatsChannel <- []*engines.Message{
-							systemMessage,
-						}
-						minResults += ResultsNumberDelta
-					}
-					break
-				}
-				if len(chats) >= batchSize {
-					doneChannel <- struct{}{}
-					break
-				}
-			}
-		}()
-
-		for {
-			done := false
-			select {
-			case chat := <-chatsChannel:
-				chats = append(chats, chat)
-			case <-doneChannel:
-				done = true
-			}
-
-			if done {
-				break
-			}
-		}
-
-		wg.Wait()
-
-		if chats == nil || len(chats) == 0 {
-			continue
-		}
-		// no same chats in the same batch
-		chats = deDupeChats(chats)
-
-		// now pick the top maxBatchSize chats
-		// so sort chats by the lebgth
-		// and pick the top batchSize
-		sort.Slice(chats, func(i, j int) bool {
-			return len(chats[i]) < len(chats[j])
-		})
-		if len(chats) > batchSize {
-			chats = chats[:batchSize]
-		}
-
-		for _, chat := range chats {
-			jobs = append(jobs, cmds.ClientRequest{
-				ProcessName: agentState.SystemName,
-				Priority:    borrow_engine.PRIO_User,
-				GetCompletionRequests: []cmds.GetCompletionRequest{
-					{
-						RawPrompt:   chatToRawPrompt(chat),
-						MinResults:  minResults,
-						Temperature: 0.9,
-					},
-				},
-				CorrelationId: *chat[len(chat)-1].ID,
-			})
-		}
-
-		// start inference
-		// min length of chats, max length of chats
-		minLen := len(chats[0])
-		maxLen := len(chats[0])
-		for _, chat := range chats {
-			if len(chat) < minLen {
-				minLen = len(chat)
-			}
-			if len(chat) > maxLen {
-				maxLen = len(chat)
-			}
-		}
-
-		fmt.Printf("Running inference for %d chats, min len: %d, max len: %d, search took: %v\n", len(chats), minLen, maxLen,
-			time.Since(searchTs))
-		// now we have jobs, let's run them
-		originalHistorySize := atomic.LoadInt32(&agentState.historySize)
-		for _, job := range jobs {
-			agentState.jobsChannel <- &job
-		}
-
-		// no we have to wait until we've got at least len(jobs) new history messages
-		for {
-			historySize := atomic.LoadInt32(&agentState.historySize)
-			if historySize >= originalHistorySize+int32(len(jobs)/2) {
-				fmt.Printf("Got %d/%d new messages in history, going to continue searching language space\n",
-					aurora.BrightBlue(historySize-originalHistorySize),
-					aurora.BrightCyan(historySize))
-				break
-			}
-			time.Sleep(1 * time.Second)
-		}
-	}
-
-	return nil
-}
-
 func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error) {
 	tpl, err := pongo2.FromString(agentState.Settings.Agent.PromptBased.Prompt)
 	if err != nil {
@@ -377,7 +188,7 @@ func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Mes
 	defer agentState.terminalsLock.Unlock()
 
 	timesVisited, exists := agentState.terminalsVisitsMap[chainSignature]
-	if exists && timesVisited > 5 {
+	if exists && timesVisited > 15 {
 		// we've been here more than 5 times, let's remove it
 		return false
 	}
