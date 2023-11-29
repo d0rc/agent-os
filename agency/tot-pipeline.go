@@ -3,6 +3,7 @@ package agency
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/engines"
+	"os"
 	"time"
 )
 
@@ -37,6 +38,18 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 		if agentState.visitTerminalMessage(messages) {
 			jobsSubmitted++
 		}
+
+		chatText := ""
+		for idxMessage, message := range messages {
+			chatText += fmt.Sprintf("======================================================\nMsg(%04d):%s, %s\n%s\n",
+				idxMessage,
+				*message.ID,
+				message.Role,
+				message.Content)
+		}
+		_ = os.MkdirAll("full-chats", os.ModePerm)
+		_ = os.WriteFile("full-chats/"+getChatSignature(messages)+".txt",
+			[]byte(chatText), os.ModePerm)
 	})
 
 	fmt.Printf("Done in %v, found %d terminal messages, jobs submitted: %d, length stats: %v\n",
@@ -61,7 +74,9 @@ func createTraverseContext(history []*engines.Message) *traverseContext {
 			MessageMap[*m.ID] = m
 		}
 		if m.ReplyTo != nil {
-			RepliesMap[*m.ReplyTo] = append(RepliesMap[*m.ReplyTo], m)
+			for k, _ := range m.ReplyTo {
+				RepliesMap[k] = append(RepliesMap[k], m)
+			}
 		}
 	}
 
@@ -87,16 +102,20 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 		return
 	}
 
-	if len(replies) < 4 {
+	if (msg.Role == engines.ChatRoleSystem || msg.Role == engines.ChatRoleUser) && (len(replies) < 4) {
 		// we can still find something interesting on this step
 		callback(path)
-		return
 	}
 
 	for _, reply := range replies {
-		if msg.ReplyTo == nil || *msg.ReplyTo != *reply.ID { // an obvious optimization to avoid cycles
-			ctx.traverse(reply, append([]*engines.Message{}, path...), callback) // pass a copy of the path
+		if msg.ReplyTo != nil {
+			_, exists := msg.ReplyTo[*reply.ID]
+			if exists {
+				// the msg can be a reply to `reply`
+				continue
+			}
 		}
+		ctx.traverse(reply, append([]*engines.Message{}, path...), callback)
 	}
 }
 

@@ -90,12 +90,19 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 			messageId := message.ID
 			alreadyExists := false
 			for _, storedMessage := range agentState.History {
-				if storedMessage.ID == messageId {
+				if *storedMessage.ID == *messageId {
+					fmt.Printf("got message with ID %s already in history, merging replyTo maps\n", *messageId)
+					if storedMessage.Content != message.Content {
+						storedMessage.Content = message.Content // fatal error!
+					}
 					alreadyExists = true
-					break
+					for k, _ := range message.ReplyTo {
+						storedMessage.ReplyTo[k] = message.ReplyTo[k]
+					}
 				}
 			}
 			if !alreadyExists {
+				fmt.Printf("Adding new message to history: %s\n", *messageId)
 				agentState.History = append(agentState.History, message)
 				atomic.AddInt32(&agentState.historySize, 1)
 			}
@@ -139,7 +146,7 @@ func (agentState *GeneralAgentInfo) agentStateResultsReceiver() {
 						resultMessage := &engines.Message{
 							ID:      &thisMessageId,
 							Content: choice,
-							ReplyTo: &serverResult.CorrelationId,
+							ReplyTo: map[string]struct{}{serverResult.CorrelationId: {}},
 							Role:    engines.ChatRoleAssistant,
 						}
 						agentState.resultsProcessingChannel <- resultMessage
@@ -223,7 +230,7 @@ func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Mes
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
 				RawPrompt:   chatToRawPrompt(messages),
-				MinResults:  8,
+				MinResults:  9,
 				Temperature: 0.9,
 			},
 		},
@@ -254,7 +261,7 @@ func deDupeChats(chats [][]*engines.Message) [][]*engines.Message {
 func getChatSignature(chat []*engines.Message) string {
 	signature := ""
 	for _, msg := range chat {
-		signature += *msg.ID
+		signature += *msg.ID + ":"
 	}
 
 	return signature

@@ -7,6 +7,7 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
+	"os"
 	"runtime"
 	"time"
 )
@@ -25,9 +26,14 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				}()
 				ioRequests := agentState.TranslateToServerCallsAndRecordHistory([]*engines.Message{message})
 				// run all at once
+				if len(ioRequests) == 0 {
+					// we have to retry generating agent response...!
+					return
+				}
 				ioResponses, err := agentState.Server.RunRequests(ioRequests, 600*time.Second)
 				if err != nil {
 					fmt.Printf("error running IO request: %v\n", err)
+					// we have to retry running request, it's easy, just send message ourselves again
 					return
 				}
 
@@ -44,10 +50,15 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 						correlationId := commandResponse.CorrelationId
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &messageId,
-							ReplyTo: &correlationId, // it should be equal to message.ID TODO: check
+							ReplyTo: map[string]struct{}{correlationId: {}}, // it should be equal to message.ID TODO: check
 							Role:    engines.ChatRoleUser,
 							Content: observation,
 						}
+
+						//
+						_ = os.MkdirAll("observations", os.ModePerm)
+						_ = os.WriteFile(fmt.Sprintf("observations/%s-%s", correlationId, messageId),
+							[]byte(observation), os.ModePerm)
 					}
 				}
 			}(message)
@@ -111,9 +122,11 @@ Always respond in the following JSON format:
 						return ps, err
 					}, "")
 
-					serializedResult, err := json.Marshal(finalResult)
+					serializedResult, err := json.MarshalIndent(finalResult, "", " ")
 					if err == nil {
-						observation = string(serializedResult)
+						// observation = string(serializedResult)
+						observations = append(observations, string(serializedResult))
+						observation = ""
 					}
 				}
 			}

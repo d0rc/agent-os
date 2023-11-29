@@ -15,11 +15,11 @@ const (
 )
 
 type Message struct {
-	ID       *string     `json:"id,omitempty"`
-	ReplyTo  *string     `json:"reply_to,omitempty"`
-	MetaInfo interface{} `json:"meta,omitempty"`
-	Role     ChatRole    `json:"role"`
-	Content  string      `json:"content"`
+	ID       *string             `json:"id,omitempty"`
+	ReplyTo  map[string]struct{} `json:"reply_to,omitempty"`
+	MetaInfo interface{}         `json:"meta,omitempty"`
+	Role     ChatRole            `json:"role"`
+	Content  string              `json:"content"`
 }
 
 func GenerateMessageId(body string) string {

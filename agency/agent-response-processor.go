@@ -21,20 +21,21 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		}
 		// it's only "parsedString" substring of original model response is interpretable by the system
 		msgId := engines.GenerateMessageId(parsedString)
-		agentState.historyAppenderChannel <- &engines.Message{
+		correctedMessage := &engines.Message{
 			ID:       &msgId,
 			ReplyTo:  res.ReplyTo,
 			MetaInfo: res.MetaInfo,
 			Role:     res.Role,
 			Content:  parsedString,
 		}
+		agentState.historyAppenderChannel <- correctedMessage
 		// let's go to cross roads here, to see if we should dive deeper here
 		voteRating, err := agentState.VoteForAction(agentState.Settings.GetAgentInitialGoal(), parsedString)
 		if err != nil {
 			fmt.Printf("Error voting for action: %v\n", err)
 			continue
 		}
-		if voteRating < 6.0 {
+		if voteRating < 4.0 {
 			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
 			continue
 		}
@@ -57,7 +58,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
 							getServerCommand(
-								*res.ID,
+								*correctedMessage.ID,
 								commandName,
 								argsData))
 					}
@@ -74,7 +75,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
 								getServerCommand(
-									*res.ID,
+									*correctedMessage.ID,
 									commandName,
 									argsData))
 						}
