@@ -57,7 +57,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					argsData, okArgsData := v.(map[string]interface{})["args"].(map[string]interface{})
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
-							getServerCommand(
+							agentState.getServerCommand(
 								*correctedMessage.ID,
 								commandName,
 								argsData))
@@ -74,7 +74,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						argsData, okArgsData := cmd["args"].(map[string]interface{})
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
-								getServerCommand(
+								agentState.getServerCommand(
 									*correctedMessage.ID,
 									commandName,
 									argsData))
@@ -96,7 +96,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 var notesLock = sync.RWMutex{}
 var notes = make(map[string][]string)
 
-func getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
+func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
 	clientRequest := &cmds.ClientRequest{
 		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
 		CorrelationId:        resultId,
@@ -176,15 +176,38 @@ func getServerCommand(resultId string, commandName string, args map[string]inter
 		}
 		notesLock.RUnlock()
 	case "final-report":
-		question := args["text"]
-		switch question.(type) {
+		data := args["text"]
+		switch data.(type) {
 		case string:
-			// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
-			tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + question.(string))
-			appendFile("say.log", question.(string))
+			if agentState.FinalReportChannel != nil {
+				agentState.FinalReportChannel <- data.(string)
+			} else {
+				// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
+				tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + data.(string))
+				appendFile("say.log", data.(string))
+			}
 		}
 	case "hire-agent":
 		fmt.Printf("Hiring agent: %s\n", args["name"])
+		if agentState.ForkCallback != nil {
+			roleName := args["role-name"].(string)
+			taskDescription := args["task-description"].(string)
+			go func(roleName, taskDescription, resultId string) {
+				for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
+					// we've got final report from our sub-agent
+					fmt.Printf("Got sub-agent's final report: %s\n", msg)
+					content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
+						roleName, msg)
+					contentMessageId := engines.GenerateMessageId(content)
+					agentState.historyAppenderChannel <- &engines.Message{
+						ID:      &contentMessageId,
+						ReplyTo: map[string]struct{}{resultId: {}},
+						Role:    engines.ChatRoleUser,
+						Content: content,
+					}
+				}
+			}(roleName, taskDescription, resultId)
+		}
 	case "browse-site":
 		var urls []string = make([]string, 0)
 		var questions []string = make([]string, 0)

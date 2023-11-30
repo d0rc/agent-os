@@ -7,7 +7,6 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
-	"os"
 	"runtime"
 	"time"
 )
@@ -55,10 +54,10 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 							Content: observation,
 						}
 
-						//
-						_ = os.MkdirAll("observations", os.ModePerm)
-						_ = os.WriteFile(fmt.Sprintf("observations/%s-%s", correlationId, messageId),
-							[]byte(observation), os.ModePerm)
+						/*
+							_ = os.MkdirAll("observations", os.ModePerm)
+							_ = os.WriteFile(fmt.Sprintf("observations/%s-%s", correlationId, messageId),
+								[]byte(observation), os.ModePerm)*/
 					}
 				}
 			}(message)

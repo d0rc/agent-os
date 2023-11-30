@@ -4,6 +4,7 @@ import (
 	"crypto/sha512"
 	"github.com/d0rc/agent-os/vectors"
 	"github.com/google/uuid"
+	"sync"
 )
 
 type ChatRole string
@@ -20,6 +21,23 @@ type Message struct {
 	MetaInfo interface{}         `json:"meta,omitempty"`
 	Role     ChatRole            `json:"role"`
 	Content  string              `json:"content"`
+	lock     sync.RWMutex
+}
+
+func (m *Message) Lock() {
+	m.lock.Lock()
+}
+
+func (m *Message) Unlock() {
+	m.lock.Unlock()
+}
+
+func (m *Message) RLock() {
+	m.lock.RLock()
+}
+
+func (m *Message) RUnlock() {
+	m.lock.RUnlock()
 }
 
 func GenerateMessageId(body string) string {

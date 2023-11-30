@@ -39,6 +39,9 @@ type GeneralAgentInfo struct {
 	terminalsLock      sync.RWMutex
 	terminalsVisitsMap map[string]int
 	terminalsVotesMap  map[string]float32
+
+	ForkCallback       func(name, goal string) chan string
+	FinalReportChannel chan string
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {

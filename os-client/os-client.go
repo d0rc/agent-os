@@ -55,10 +55,10 @@ const (
 	REP_IO
 )
 
-var maxParallelRequestsChannel = make(chan struct{}, 48)
+var maxParallelRequestsChannel = make(chan struct{}, 512)
 
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
-	timeout = 10 * time.Minute
+	timeout = 600 * time.Second
 	if req.SpecialCaseResponse != "" || isRequestEmpty(req) {
 		return &cmds.ServerResponse{
 			SpecialCaseResponse: req.SpecialCaseResponse,

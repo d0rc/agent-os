@@ -3,7 +3,7 @@ package agency
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/engines"
-	"os"
+	"github.com/logrusorgru/aurora"
 	"time"
 )
 
@@ -47,12 +47,14 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 				message.Role,
 				message.Content)
 		}
-		_ = os.MkdirAll("full-chats", os.ModePerm)
-		_ = os.WriteFile("full-chats/"+getChatSignature(messages)+".txt",
-			[]byte(chatText), os.ModePerm)
+		/*
+			_ = os.MkdirAll("full-chats", os.ModePerm)
+			_ = os.WriteFile("full-chats/"+getChatSignature(messages)+".txt",
+				[]byte(chatText), os.ModePerm)*/
 	})
 
-	fmt.Printf("Done in %v, found %d terminal messages, jobs submitted: %d, length stats: %v\n",
+	fmt.Printf("[%s] Done in %v, found %d terminal messages, jobs submitted: %d, length stats: %v\n",
+		aurora.BrightBlue(agentState.Settings.Agent.Name),
 		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
 	return jobsSubmitted, nil
 }
@@ -74,9 +76,11 @@ func createTraverseContext(history []*engines.Message) *traverseContext {
 			MessageMap[*m.ID] = m
 		}
 		if m.ReplyTo != nil {
+			m.RLock()
 			for k, _ := range m.ReplyTo {
 				RepliesMap[k] = append(RepliesMap[k], m)
 			}
+			m.RUnlock()
 		}
 	}
 

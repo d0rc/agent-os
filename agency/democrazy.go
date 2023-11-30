@@ -5,10 +5,8 @@ import (
 	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
-	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -143,13 +141,16 @@ retryVoting:
 		votesCache[actionDescription] = finalRating
 		votesCacheLock.Unlock()
 
-		_ = os.MkdirAll("action-voting-cache", os.ModePerm)
-		_ = os.WriteFile(fmt.Sprintf("action-voting-cache/%s.md",
-			engines.GenerateMessageId(systemMessage)), []byte(fmt.Sprintf(`UUID: %s
-%s
+		/*
+					_ = os.MkdirAll("action-voting-cache", os.ModePerm)
+					_ = os.WriteFile(fmt.Sprintf("action-voting-cache/%s.md",
+						engines.GenerateMessageId(systemMessage)), []byte(fmt.Sprintf(`UUID: %s
+			%s
 
-Ratings: %v
-`, engines.GenerateMessageId(systemMessage), systemMessage, listOfRatings)), os.ModePerm)
+			Ratings: %v
+			`, engines.GenerateMessageId(systemMessage), systemMessage, listOfRatings)), os.ModePerm)
+
+		*/
 	}
 
 	return finalRating, nil
