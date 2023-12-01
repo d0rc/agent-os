@@ -73,7 +73,7 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 				StopTokens:  []string{"###"},
 				MinResults:  minResults,
 				//BestOf:      3,
-				MaxResults: 1,
+				MaxResults: minResults,
 			},
 		}, ctx, "document-reduce", borrow_engine.PRIO_System)
 		minResults = 100 // next time we want all results, when making retry

@@ -118,6 +118,8 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 				SearchAge:      0,
 			}
 		}
+		// now delete all these searches
+		delete(currentSearches, gsr.Keywords)
 		currentSearchesLock.Unlock()
 		return nil, fmt.Errorf("error running Google search for keywords: %s", gsr.Keywords)
 	}
@@ -153,6 +155,7 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 	for _, ch := range currentSearches[gsr.Keywords] {
 		ch <- finalResponse
 	}
+	delete(currentSearches, gsr.Keywords)
 	currentSearchesLock.Unlock()
 
 	return finalResponse, nil

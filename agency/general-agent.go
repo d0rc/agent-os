@@ -114,7 +114,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 }
 
 func (agentState *GeneralAgentInfo) agentStateJobsSender() {
-	maxJobThreads := make(chan struct{}, 4)
+	maxJobThreads := make(chan struct{}, 128)
 	for {
 		select {
 		case <-agentState.quitChannelJobs:

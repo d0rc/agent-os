@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/logrusorgru/aurora"
 	"io"
 	"net/http"
 	"time"
@@ -58,7 +59,7 @@ const (
 var maxParallelRequestsChannel = make(chan struct{}, 512)
 
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
-	timeout = 600 * time.Second
+	timeout = 60 * time.Second
 	if req.SpecialCaseResponse != "" || isRequestEmpty(req) {
 		return &cmds.ServerResponse{
 			SpecialCaseResponse: req.SpecialCaseResponse,
@@ -81,7 +82,10 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 
 	resp, err := client.Post(c.Url, "application/json", bytes.NewBuffer(reqBytes))
 	if err != nil {
-		return nil, fmt.Errorf("error sending request: %w", err)
+		fmt.Printf("%s running OS request, going to try: %v\n",
+			aurora.BrightRed("error"),
+			aurora.BrightGreen(err))
+		return c.RunRequest(req, timeout, executionPool)
 	}
 
 	defer resp.Body.Close()
