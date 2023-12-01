@@ -35,7 +35,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			fmt.Printf("Error voting for action: %v\n", err)
 			continue
 		}
-		if voteRating < 4.0 {
+		if voteRating < 2.0 {
 			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
 			continue
 		}
