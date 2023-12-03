@@ -167,8 +167,13 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			TopK              int     `json:"top_k"`
 			MaxTokens         int     `json:"max_tokens"`
 			RepetitionPenalty float32 `json:"repetition_penalty"`
+			Stop              string  `json:"stop"`
 		}
 
+		var stopTokens = []string{"###"}
+		if len(batch[0].Req.StopTokens) > 0 {
+			stopTokens[0] = batch[0].Req.StopTokens[0]
+		}
 		req := &togetherRequest{
 			Model:       "mistralai/Mistral-7B-Instruct-v0.1",
 			Prompt:      batch[0].Req.RawPrompt,
@@ -176,6 +181,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			TopP:        0.7,
 			TopK:        50,
 			MaxTokens:   1024,
+			Stop:        stopTokens[0],
 		}
 
 		reqJson, err := json.Marshal(req)

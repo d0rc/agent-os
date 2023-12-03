@@ -94,15 +94,19 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 			tmp_currentSummary := strings.TrimSpace(currentSummaryChoice)
 			parsedString, parserErr := parser(tmp_currentSummary)
 			if parserErr != nil {
-				//fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
-				//	aurora.BrightYellow(retryCounter),
-				//	aurora.BrightRed(tmp_currentSummary))
+				fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
+					aurora.BrightYellow(retryCounter),
+					aurora.BrightRed(tmp_currentSummary))
 				whichWayToGo[summaryChoiceIdx] = false
 			} else {
 				whichWayToGo[summaryChoiceIdx] = true
 				// parsedString contains final parsed JSON
 
-				currentSummary = parsedString
+				if currentSummary != "" && parsedString == "" {
+					fmt.Printf("using old value of currentSummary: %s\n", aurora.BrightYellow(currentSummary))
+				} else {
+					currentSummary = parsedString
+				}
 				success = true
 				break
 				// break ...?
