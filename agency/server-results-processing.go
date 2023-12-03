@@ -102,10 +102,9 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 				} else {
 					// ok, we've got the observation, lets reduce over it
 					finalResult := make(map[string]interface{})
-					tools.DocumentReduce(observation, fmt.Sprintf(`Your goal is not everything which helps to answer the following question:
+					tools.DocumentReduce(observation, fmt.Sprintf(`Your goal is to collect facts which help to answer the following question:
 %s
-
-Always respond in the following JSON format:
+Respond in the following JSON format::
 {
    "general-information": "write general information here",
    "entities": [],

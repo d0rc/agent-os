@@ -178,9 +178,9 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			Model:       "mistralai/Mistral-7B-Instruct-v0.1",
 			Prompt:      batch[0].Req.RawPrompt,
 			Temperature: batch[0].Req.Temperature,
-			TopP:        0.7,
+			TopP:        0.9,
 			TopK:        50,
-			MaxTokens:   1024,
+			MaxTokens:   2048,
 			Stop:        stopTokens[0],
 		}
 
