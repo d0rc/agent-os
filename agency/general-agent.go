@@ -9,6 +9,7 @@ import (
 	pongo2 "github.com/flosch/pongo2/v6"
 	"strings"
 	"sync"
+	"time"
 )
 
 // ResultsNumberDelta if nothing interesting got generated, increase number of _new_ results
@@ -38,6 +39,7 @@ type GeneralAgentInfo struct {
 
 	ForkCallback       func(name, goal string) chan string
 	FinalReportChannel chan string
+	jobsSubmittedTs    time.Time
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {

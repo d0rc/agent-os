@@ -2,6 +2,8 @@ package agency
 
 import (
 	"fmt"
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
+	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/logrusorgru/aurora"
 	"time"
@@ -53,9 +55,36 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 				[]byte(chatText), os.ModePerm)*/
 	})
 
+	if jobsSubmitted > 0 {
+		agentState.jobsSubmittedTs = time.Now()
+	}
+
 	fmt.Printf("[%s] Done in %v, found %d terminal messages, jobs submitted: %d, length stats: %v\n",
 		aurora.BrightBlue(agentState.Settings.Agent.Name),
 		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
+
+	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > 1*time.Minute {
+		fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
+			aurora.BrightRed(agentState.Settings.Agent.Name),
+			time.Since(agentState.jobsSubmittedTs))
+
+		agentState.jobsSubmittedTs = time.Now()
+		agentState.jobsChannel <- &cmds.ClientRequest{
+			ProcessName: agentState.SystemName,
+			Priority:    borrow_engine.PRIO_User,
+			GetCompletionRequests: []cmds.GetCompletionRequest{
+				{
+					RawPrompt: chatToRawPrompt([]*engines.Message{
+						systemMessage,
+					}),
+					MinResults:  9,
+					Temperature: 0.9,
+				},
+			},
+			CorrelationId: *systemMessage.ID,
+		}
+	}
+
 	return jobsSubmitted, nil
 }
 

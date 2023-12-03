@@ -56,7 +56,7 @@ const (
 	REP_IO
 )
 
-var maxParallelRequestsChannel = make(chan struct{}, 4)
+var maxParallelRequestsChannel = make(chan struct{}, 128)
 
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
 	timeout = 600 * time.Second
@@ -73,6 +73,7 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 			<-maxParallelRequestsChannel
 		}()
 	}
+retry:
 	client := http.Client{Timeout: timeout}
 
 	reqBytes, err := json.Marshal(req)
@@ -85,7 +86,7 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 		fmt.Printf("%s running OS request, going to try: %v\n",
 			aurora.BrightRed("error"),
 			aurora.BrightGreen(err))
-		return c.RunRequest(req, timeout, executionPool)
+		goto retry
 	}
 
 	defer resp.Body.Close()
