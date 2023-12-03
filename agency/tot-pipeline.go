@@ -113,7 +113,9 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 
 	for _, reply := range replies {
 		if msg.ReplyTo != nil {
+			msg.RLock()
 			_, exists := msg.ReplyTo[*reply.ID]
+			msg.RUnlock()
 			if exists {
 				// the msg can be a reply to `reply`
 				continue

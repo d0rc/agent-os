@@ -55,8 +55,7 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("error sending request http code is %d", resp.StatusCode)
 		zlog.Error().Err(err).
-			Str("endpoint", inferenceEngine.EmbeddingsEndpointUrl).
-			Msgf("error sending request http code is %d", resp.StatusCode)
+			Msgf("embeddings: http code is %d, endpoint: %s, err: %v", resp.StatusCode, inferenceEngine.EmbeddingsEndpointUrl, err)
 		return nil, err
 	}
 	// read resp.Body to result

@@ -38,7 +38,10 @@ func main() {
 		}
 		clonedSettings[0].Agent.Name = name
 		promptLines := strings.Split(clonedSettings[0].Agent.PromptBased.Prompt, "\n")
-		promptLines[0] = goal
+		promptLines[0] = fmt.Sprintf("You are an AI Agent, your role is - %s. Your current goal is - %s",
+			name, goal)
+		clonedSettings[0].Agent.PromptBased.Prompt = strings.Join(promptLines, "\n")
+
 		finalPrompt := strings.Join(promptLines, "\n")
 		clonedSettings[0].Agent.PromptBased.Prompt = finalPrompt
 

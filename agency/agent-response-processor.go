@@ -12,6 +12,8 @@ import (
 	"sync"
 )
 
+const MinimalVotingRatingForCommand = 6.0
+
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for resIdx, res := range results {
@@ -19,6 +21,18 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		if err != nil {
 			continue
 		}
+
+		// let's go to cross roads here, to see if we should dive deeper here
+		voteRating, err := agentState.VoteForAction(agentState.Settings.GetAgentInitialGoal(), parsedString)
+		if err != nil {
+			fmt.Printf("Error voting for action: %v\n", err)
+			continue
+		}
+		if voteRating < MinimalVotingRatingForCommand {
+			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
+			continue
+		}
+
 		// it's only "parsedString" substring of original model response is interpretable by the system
 		msgId := engines.GenerateMessageId(parsedString)
 		correctedMessage := &engines.Message{
@@ -29,16 +43,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			Content:  parsedString,
 		}
 		agentState.historyAppenderChannel <- correctedMessage
-		// let's go to cross roads here, to see if we should dive deeper here
-		voteRating, err := agentState.VoteForAction(agentState.Settings.GetAgentInitialGoal(), parsedString)
-		if err != nil {
-			fmt.Printf("Error voting for action: %v\n", err)
-			continue
-		}
-		if voteRating < 2.0 {
-			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
-			continue
-		}
+
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {
@@ -190,23 +195,26 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 	case "hire-agent":
 		fmt.Printf("Hiring agent: %s\n", args["name"])
 		if agentState.ForkCallback != nil {
-			roleName := args["role-name"].(string)
-			taskDescription := args["task-description"].(string)
-			go func(roleName, taskDescription, resultId string) {
-				for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
-					// we've got final report from our sub-agent
-					fmt.Printf("Got sub-agent's final report: %s\n", msg)
-					content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
-						roleName, msg)
-					contentMessageId := engines.GenerateMessageId(content)
-					agentState.historyAppenderChannel <- &engines.Message{
-						ID:      &contentMessageId,
-						ReplyTo: map[string]struct{}{resultId: {}},
-						Role:    engines.ChatRoleUser,
-						Content: content,
+			roleNameInterface, exists := args["role-name"]
+			if exists {
+				roleName := roleNameInterface.(string)
+				taskDescription := args["task-description"].(string)
+				go func(roleName, taskDescription, resultId string) {
+					for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
+						// we've got final report from our sub-agent
+						fmt.Printf("Got sub-agent's final report: %s\n", msg)
+						content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
+							roleName, msg)
+						contentMessageId := engines.GenerateMessageId(content)
+						agentState.historyAppenderChannel <- &engines.Message{
+							ID:      &contentMessageId,
+							ReplyTo: map[string]struct{}{resultId: {}},
+							Role:    engines.ChatRoleUser,
+							Content: content,
+						}
 					}
-				}
-			}(roleName, taskDescription, resultId)
+				}(roleName, taskDescription, resultId)
+			}
 		}
 	case "browse-site":
 		var urls []string = make([]string, 0)
