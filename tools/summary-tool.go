@@ -117,7 +117,9 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 			fmt.Printf("Failed to generate any summary for this step [%d/%d]\n",
 				idx,
 				len(snippets))
-			goto retryGeneratingSummary
+			if retryCounter < 10 {
+				goto retryGeneratingSummary
+			}
 		}
 
 		if time.Since(ts) > 5*time.Second {

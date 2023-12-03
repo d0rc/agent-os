@@ -52,19 +52,20 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 		//	Msg("error sending request")
 		return nil, err
 	}
-	if resp.StatusCode != 200 {
-		err = fmt.Errorf("error sending request http code is %d", resp.StatusCode)
-		zlog.Error().Err(err).
-			Msgf("embeddings: http code is %d, endpoint: %s, err: %v", resp.StatusCode, inferenceEngine.EmbeddingsEndpointUrl, err)
-		return nil, err
-	}
+
 	// read resp.Body to result
 	defer resp.Body.Close()
 	result, err := io.ReadAll(resp.Body)
 	if err != nil {
 		zlog.Error().Err(err).
-			Interface("batch", batch).
-			Msg("error reading response")
+			Msgf("embeddings: http code is %d, endpoint: %s, err: %v", resp.StatusCode, inferenceEngine.EmbeddingsEndpointUrl, err)
+		return nil, err
+	}
+
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("error sending request http code is %d", resp.StatusCode)
+		zlog.Error().Err(err).
+			Msgf("embeddings: http code is %d, endpoint: %s, err: %s", resp.StatusCode, inferenceEngine.EmbeddingsEndpointUrl, string(result))
 		return nil, err
 	}
 
