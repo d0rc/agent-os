@@ -110,8 +110,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 		if resp.StatusCode != 200 {
 			err = fmt.Errorf("error sending request http code is %d", resp.StatusCode)
 			zlog.Error().Err(err).
-				Interface("endpoint", inferenceEngine.EndpointUrl).
-				Msgf("error sending request http code is %d", resp.StatusCode)
+				Msgf("completion: http code is %d, url: %s, err: %v", resp.StatusCode, inferenceEngine.EndpointUrl, err)
 			return nil, err
 		}
 
