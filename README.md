@@ -1,4 +1,4 @@
-![logo](docs/logo.png)
+<img src="docs/logo.png" alt="logo" style="zoom:25%;" />
 
 # AgencyOS: A Computational Environment for AI Agents
 
