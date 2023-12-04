@@ -101,6 +101,7 @@ func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.A
 		for summaryChoiceIdx, currentSummaryChoice := range tmp.GetCompletionResponse[0].Choices {
 			currentSummaryChoice = assistantPrefix + currentSummaryChoice
 			tmp_currentSummary := strings.TrimSpace(currentSummaryChoice)
+			tmp_currentSummary = strings.ReplaceAll(tmp_currentSummary, "\n", " ")
 			parsedString, parserErr := parser(tmp_currentSummary)
 			if parserErr != nil {
 				fmt.Printf("[%d] Error generating summary:\n```%s```... going to retry...!\n",
@@ -170,6 +171,10 @@ func shuffle(snippets []string) []string {
 func dropEmptyLines(snippet string) string {
 	// remove empty lines from text in snippet
 	for {
+		snippet = strings.ReplaceAll(snippet, "()", "")
+		snippet = strings.ReplaceAll(snippet, "[", "")
+		snippet = strings.ReplaceAll(snippet, "]", "")
+		snippet = strings.ReplaceAll(snippet, "!", "")
 		snippet = strings.ReplaceAll(snippet, "\t\t", " ")
 		snippet = strings.ReplaceAll(snippet, "\n\n", "\n")
 		snippet = strings.ReplaceAll(snippet, "  ", " ")

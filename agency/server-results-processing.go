@@ -114,7 +114,7 @@ Respond in the following JSON format:
 						ps := ""
 						err := tools.ParseJSON(s, func(x string) error {
 							ps = x
-							return json.Unmarshal([]byte(s), &finalResult)
+							return json.Unmarshal([]byte(x), &finalResult)
 						})
 
 						return ps, err
