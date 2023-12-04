@@ -10,7 +10,9 @@ import (
 	"github.com/d0rc/agent-os/utils"
 	"github.com/logrusorgru/aurora"
 	zlog "github.com/rs/zerolog/log"
+	"math/rand"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -28,7 +30,10 @@ func DocumentReduceGetCached(document, question string, ctx *server.Context) (st
 	return "", false
 }
 
-func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, parser func(string) (string, error), model string) string {
+var totalReductions uint64 = 0
+var failedReductions uint64 = 0
+
+func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.AgentOSClient, parser func(string) (string, error), model string) string {
 	if len(document) == 0 {
 		return ""
 	}
@@ -47,9 +52,12 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 		return fmt.Sprintf("%v", err)
 	}
 
+	// snippets = shuffle(snippets)
+
 	success := false
 	currentSummary := ""
 	for idx, snippet := range snippets {
+		snippet = dropEmptyLines(snippet)
 		minResults := 1
 		retryCounter := 0
 	retryGeneratingSummary:
@@ -64,10 +72,10 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 %s
 
 %s
-### Assistant:
-`, strings.TrimSpace(snippet),
-					strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:")),
-					systemPrompt),
+### Assistant:%s
+`, "```\n"+strings.TrimSpace(snippet)+"\n```",
+					"```\n"+strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))+"\n```",
+					systemPrompt, assistantPrefix),
 				Model:       model,
 				Temperature: 0.8,
 				StopTokens:  []string{"###"},
@@ -91,6 +99,7 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 		whichWayToGo := make([]bool, len(tmp.GetCompletionResponse[0].Choices))
 		success = false
 		for summaryChoiceIdx, currentSummaryChoice := range tmp.GetCompletionResponse[0].Choices {
+			currentSummaryChoice = assistantPrefix + currentSummaryChoice
 			tmp_currentSummary := strings.TrimSpace(currentSummaryChoice)
 			parsedString, parserErr := parser(tmp_currentSummary)
 			if parserErr != nil {
@@ -113,10 +122,13 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 			}
 		}
 
+		atomic.AddUint64(&totalReductions, 1)
 		if !success {
-			fmt.Printf("Failed to generate any summary for this step [%d/%d]\n",
+			atomic.AddUint64(&failedReductions, 1)
+			fmt.Printf("Failed to generate any summary for this step [%d/%d] - %4.4f\n",
 				idx,
-				len(snippets))
+				len(snippets),
+				float64(atomic.LoadUint64(&failedReductions))/float64(atomic.LoadUint64(&totalReductions)))
 			if retryCounter < 10 {
 				goto retryGeneratingSummary
 			}
@@ -146,6 +158,35 @@ func DocumentReduce(document, question string, ctx *os_client.AgentOSClient, par
 	return currentSummary
 }
 
+func shuffle(snippets []string) []string {
+	// shuffle snippets
+	for i := len(snippets) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		snippets[i], snippets[j] = snippets[j], snippets[i]
+	}
+	return snippets
+}
+
+func dropEmptyLines(snippet string) string {
+	// remove empty lines from text in snippet
+	for {
+		snippet = strings.ReplaceAll(snippet, "\t\t", " ")
+		snippet = strings.ReplaceAll(snippet, "\n\n", "\n")
+		snippet = strings.ReplaceAll(snippet, "  ", " ")
+		snippet = strings.ReplaceAll(snippet, " \n", "\n")
+		if strings.Contains(snippet, "  ") ||
+			strings.Contains(snippet, "\n\n") ||
+			strings.Contains(snippet, "\t\t") ||
+			strings.Contains(snippet, " \n") {
+			continue
+		}
+
+		break
+	}
+
+	return snippet
+}
+
 func tokenizeDocument(document string, ctx *os_client.AgentOSClient) ([]string, error) {
 	// idea is to split document into batch of tokens of max length
 	// max_snippet_size = (info.LLM.GetContextLength() * 2 / 3)
@@ -169,7 +210,7 @@ func tokenizeDocument(document string, ctx *os_client.AgentOSClient) ([]string, 
 		return nil, fmt.Errorf("failed to tokenize document: %v", err)
 	}
 
-	snippetLength := 4096 * 1 / 7
+	snippetLength := 700
 	snippets := make([]string, 0)
 	for i := 0; i < len(tokenized); i += snippetLength {
 		end := i + snippetLength

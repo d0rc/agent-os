@@ -212,7 +212,7 @@ func renderMarkdown(rawData string) (string, error) {
 				return ""
 			}
 			// Default logic for other URLs
-			return md.DefaultGetAbsoluteURL(selector, rawURL, domain)
+			return ""
 		},
 	}
 	convertor := md.NewConverter("", true, opt)

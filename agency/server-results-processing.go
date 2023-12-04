@@ -104,13 +104,13 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 					finalResult := make(map[string]interface{})
 					tools.DocumentReduce(observation, fmt.Sprintf(`Your goal is to collect facts which help to answer the following question:
 %s
-Respond in the following JSON format::
+Respond in the following JSON format:
 {
    "general-information": "write general information here",
    "entities": [],
    "facts": []
 }
-`, pageResponse.OriginalQuestion), agentState.Server, func(s string) (string, error) {
+`, pageResponse.OriginalQuestion), "{\n   \"general-information\": \"", agentState.Server, func(s string) (string, error) {
 						ps := ""
 						err := tools.ParseJSON(s, func(x string) error {
 							ps = x
