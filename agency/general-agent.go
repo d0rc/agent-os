@@ -37,6 +37,8 @@ type GeneralAgentInfo struct {
 	ForkCallback       func(name, goal string) chan string
 	FinalReportChannel chan string
 	jobsSubmittedTs    time.Time
+	jobsReceived       uint64
+	jobsFinished       uint64
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {

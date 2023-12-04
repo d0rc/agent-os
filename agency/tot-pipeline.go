@@ -6,14 +6,19 @@ import (
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/logrusorgru/aurora"
+	"sync/atomic"
 	"time"
 )
 
 func (agentState *GeneralAgentInfo) ToTPipeline() {
 	for {
-		jobsSent, _ := agentState.totPipelineStep()
-		if jobsSent == 0 {
+		if atomic.LoadUint64(&agentState.jobsFinished) < atomic.LoadUint64(&agentState.jobsReceived) {
 			time.Sleep(5000 * time.Millisecond)
+		} else {
+			jobsSent, _ := agentState.totPipelineStep()
+			if jobsSent == 0 {
+				time.Sleep(5000 * time.Millisecond)
+			}
 		}
 	}
 }
@@ -63,7 +68,8 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 		aurora.BrightBlue(agentState.Settings.Agent.Name),
 		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
 
-	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter {
+	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter &&
+		atomic.LoadUint64(&agentState.jobsFinished) == atomic.LoadUint64(&agentState.jobsReceived) {
 		fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
 			aurora.BrightRed(agentState.Settings.Agent.Name),
 			time.Since(agentState.jobsSubmittedTs))
