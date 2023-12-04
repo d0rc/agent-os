@@ -1,4 +1,6 @@
- # AgencyOS: A Computational Environment for AI Agents
+![logo](docs/logo.png)
+
+# AgencyOS: A Computational Environment for AI Agents
 
 AgencyOS is not an operating system for computer users, but rather a computational environment designed specifically for AI agents running on computing infrastructure. It's a Golang library and small wrapper around it - the server binary. The server acts as an orchestration platform providing agents with high-performance cached tools API, state of the art compute router, which supports routing requests to remote cloud GPUs, local GPUs, or even customer's own remote hardware.
 
@@ -10,6 +12,8 @@ AgencyOS is not an operating system for computer users, but rather a computation
 ## I don't want to setup it to see what examples are doing
 
 https://youtu.be/0fUT0KdozjE
+
+https://youtu.be/xfBFrS508EA
 
 ## Unix `top` style bird-eyes view
 

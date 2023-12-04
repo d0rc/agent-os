@@ -7,12 +7,11 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
-	"runtime"
 	"time"
 )
 
 func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
-	maxIoRequestsChan := make(chan struct{}, runtime.NumCPU()-2)
+	maxIoRequestsChan := make(chan struct{}, MaxIoRequestsThreads)
 	for {
 		select {
 		case <-agentState.quitChannelProcessing:
