@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// ResultsNumberDelta if nothing interesting got generated, increase number of _new_ results
-const ResultsNumberDelta = 10
-
 type GeneralAgentInfo struct {
 	SystemName               string
 	Settings                 *AgentSettings

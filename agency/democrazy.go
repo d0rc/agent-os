@@ -51,7 +51,7 @@ Respond in the JSON format:
 		Rate      interface{} `json:"rate"`
 	}
 
-	minResults := 7
+	minResults := VoterMinResults
 retryVoting:
 	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
@@ -109,9 +109,6 @@ retryVoting:
 			default:
 				fmt.Printf("Don't know what to do with vote rate: %v\n", currentVote.Rate)
 			}
-			if currentVoteRate >= 0 && currentVoteRate <= 1 {
-				fmt.Printf("Strange - Vote rate: %f\n", currentVoteRate)
-			}
 			currentRating += currentVoteRate
 			numberOfVotes++
 			listOfRatings = append(listOfRatings, currentVoteRate)
@@ -136,7 +133,7 @@ retryVoting:
 
 	//fmt.Printf("Final rating: %f, number of votes: %d\n", finalRating, numberOfVotes)
 
-	if numberOfVotes >= 5 {
+	if numberOfVotes >= NumberOfVotesToCache {
 		votesCacheLock.Lock()
 		votesCache[actionDescription] = finalRating
 		votesCacheLock.Unlock()

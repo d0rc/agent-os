@@ -12,8 +12,6 @@ import (
 	"sync"
 )
 
-const MinimalVotingRatingForCommand = 6.0
-
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for resIdx, res := range results {

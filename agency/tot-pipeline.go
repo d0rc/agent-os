@@ -63,7 +63,7 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 		aurora.BrightBlue(agentState.Settings.Agent.Name),
 		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
 
-	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > 1*time.Minute {
+	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter {
 		fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
 			aurora.BrightRed(agentState.Settings.Agent.Name),
 			time.Since(agentState.jobsSubmittedTs))
@@ -129,7 +129,7 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 	path = append(path, msg)
 	replies := ctx.RepliesMap[*msg.ID]
 
-	if len(replies) == 0 || len(path) > 3 {
+	if len(replies) == 0 || len(path) > ToTPathLenToTriggerTerminalCallback {
 		// Terminal message reached, execute callback
 		callback(path)
 		return
