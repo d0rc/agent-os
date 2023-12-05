@@ -63,7 +63,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 							agentState.getServerCommand(
 								*correctedMessage.ID,
 								commandName,
-								argsData))
+								argsData)...)
 					}
 				case []map[string]interface{}:
 					// ok, it's a list of commands, for a fuck sake...
@@ -80,7 +80,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 								agentState.getServerCommand(
 									*correctedMessage.ID,
 									commandName,
-									argsData))
+									argsData)...)
 						}
 					}
 				default:
@@ -99,22 +99,23 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 var notesLock = sync.RWMutex{}
 var notes = make(map[string][]string)
 
-func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandName string, args map[string]interface{}) *cmds.ClientRequest {
-	clientRequest := &cmds.ClientRequest{
+func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandName string, args map[string]interface{}) []*cmds.ClientRequest {
+	clientRequests := make([]*cmds.ClientRequest, 0)
+	clientRequests = append(clientRequests, &cmds.ClientRequest{
 		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
 		CorrelationId:        resultId,
-	}
+	})
 	switch commandName {
 	case "bing-search":
 		keywords := args["keywords"]
 		switch keywords.(type) {
 		case string:
-			clientRequest.GoogleSearchRequests = append(clientRequest.GoogleSearchRequests, cmds.GoogleSearchRequest{
+			clientRequests[0].GoogleSearchRequests = append(clientRequests[0].GoogleSearchRequests, cmds.GoogleSearchRequest{
 				Keywords: keywords.(string),
 			})
 		case []interface{}:
 			for _, keyword := range keywords.([]interface{}) {
-				clientRequest.GoogleSearchRequests = append(clientRequest.GoogleSearchRequests, cmds.GoogleSearchRequest{
+				clientRequests[0].GoogleSearchRequests = append(clientRequests[0].GoogleSearchRequests, cmds.GoogleSearchRequest{
 					Keywords: keyword.(string),
 				})
 			}
@@ -123,7 +124,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 		section := args["section"]
 		text := args["text"]
 		if section == nil || text == nil {
-			clientRequest.SpecialCaseResponse = "No section or text specified."
+			clientRequests[0].SpecialCaseResponse = "No section or text specified."
 			break
 		}
 		sectionString := section.(string)
@@ -140,7 +141,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			notes[sectionString] = append(notes[sectionString], string(jsonText))
 		}
 		notesLock.Unlock()
-		clientRequest.SpecialCaseResponse = "Ok, note saved."
+		clientRequests[0].SpecialCaseResponse = "Ok, note saved."
 
 		notesLock.RLock()
 		allNotesJson, err := json.Marshal(notes)
@@ -151,7 +152,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 	case "read-note":
 		section := args["section"]
 		if section == nil {
-			clientRequest.SpecialCaseResponse = "No section specified."
+			clientRequests[0].SpecialCaseResponse = "No section specified."
 		} else {
 			notesLock.RLock()
 			var texts []string
@@ -166,16 +167,30 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			}
 			notesLock.RUnlock()
 			if found {
-				clientRequest.SpecialCaseResponse = texts[len(texts)-1]
+				// we should return all possible notes here, so...
+				if len(texts) == 1 {
+					clientRequests[0].SpecialCaseResponse = texts[len(texts)-1]
+				} else {
+					for idx, text := range texts {
+						if idx == 0 {
+							clientRequests[0].SpecialCaseResponse = texts[len(texts)-1]
+						} else {
+							clientRequests = append(clientRequests, &cmds.ClientRequest{
+								CorrelationId:       resultId,
+								SpecialCaseResponse: text,
+							})
+						}
+					}
+				}
 			} else {
-				clientRequest.SpecialCaseResponse = "No note found."
+				clientRequests[0].SpecialCaseResponse = "No note found."
 			}
 		}
 	case "list-notes":
-		clientRequest.SpecialCaseResponse = "Notes:\n"
+		clientRequests[0].SpecialCaseResponse = "Notes:\n"
 		notesLock.RLock()
 		for section, text := range notes {
-			clientRequest.SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
+			clientRequests[0].SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
 		}
 		notesLock.RUnlock()
 	case "final-report":
@@ -237,7 +252,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 				}
 			}
 		} else {
-			clientRequest.SpecialCaseResponse = "No url specified."
+			clientRequests[0].SpecialCaseResponse = "No url specified."
 			gotError = true
 		}
 		if args["question"] != nil {
@@ -253,7 +268,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 				}
 			}
 		} else {
-			clientRequest.SpecialCaseResponse = "No question specified."
+			clientRequests[0].SpecialCaseResponse = "No question specified."
 			gotError = true
 		}
 
@@ -261,7 +276,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			// check url is not malformed:
 			_, err := url.ParseRequestURI(subUrl)
 			if err != nil {
-				clientRequest.SpecialCaseResponse = fmt.Sprintf("Malformed URL: %s", subUrl)
+				clientRequests[0].SpecialCaseResponse = fmt.Sprintf("Malformed URL: %s", subUrl)
 				gotError = true
 				break
 			}
@@ -271,7 +286,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			fmt.Printf("Browsing site: %v - %v, err: %v\n", urls, questions, gotError)
 			for _, subUrl := range urls {
 				for _, subQuestion := range questions {
-					clientRequest.GetPageRequests = append(clientRequest.GetPageRequests, cmds.GetPageRequest{
+					clientRequests[0].GetPageRequests = append(clientRequests[0].GetPageRequests, cmds.GetPageRequest{
 						Url:           subUrl,
 						Question:      subQuestion,
 						ReturnSummary: false,
@@ -286,9 +301,9 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 	default:
 		fmt.Printf("Unknown command: %s\n", commandName)
 	}
-	clientRequest.CorrelationId = resultId
+	clientRequests[0].CorrelationId = resultId
 
-	return clientRequest
+	return clientRequests
 }
 
 func appendFile(fname string, text string) {
