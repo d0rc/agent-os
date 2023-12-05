@@ -119,7 +119,7 @@ retryVoting:
 		minResults = len(serverResponse.GetCompletionResponse[0].Choices) + 1
 	}
 
-	if numberOfVotes < 5 && minResults < 50 {
+	if numberOfVotes < MinimumNumberOfVotes && minResults < 50 {
 		minResults += 5
 		goto retryVoting
 	}

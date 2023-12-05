@@ -204,6 +204,8 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 						content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
 							roleName, msg)
 						contentMessageId := engines.GenerateMessageId(content)
+						appendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
+							roleName, taskDescription, msg))
 						agentState.historyAppenderChannel <- &engines.Message{
 							ID:      &contentMessageId,
 							ReplyTo: map[string]struct{}{resultId: {}},
