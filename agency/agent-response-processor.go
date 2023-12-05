@@ -206,7 +206,6 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			}
 		}
 	case "hire-agent":
-		fmt.Printf("Hiring agent: %s\n", args["name"])
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
@@ -215,7 +214,11 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 				if taskDescriptionInterface != nil {
 					var taskDescription string
 					taskDescription = taskDescriptionInterface.(string)
+					fmt.Printf("Hiring agent: %s, to execute task: %s\n",
+						aurora.BrightWhite(roleName),
+						aurora.BrightYellow(taskDescription))
 					go func(roleName, taskDescription, resultId string) {
+
 						for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
 							// we've got final report from our sub-agent
 							fmt.Printf("Got sub-agent's final report: %s\n", msg)
