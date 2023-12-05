@@ -42,6 +42,18 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		}
 		agentState.historyAppenderChannel <- correctedMessage
 
+		reactiveResultSink := func(msgId, content string) {
+			reactiveResponseId := engines.GenerateMessageId(content)
+			reactiveResponse := &engines.Message{
+				ID:       &reactiveResponseId,
+				ReplyTo:  map[string]struct{}{*correctedMessage.ID: {}},
+				MetaInfo: res.MetaInfo,
+				Role:     engines.ChatRoleUser,
+				Content:  content,
+			}
+			agentState.historyAppenderChannel <- reactiveResponse
+		}
+
 		//fmt.Printf("[%d] %s\n", currentDepth, aurora.BrightGreen(res.Content))
 		for _, parsedResult := range parsedResults {
 			if parsedResult.HasAnyTags("thoughts") {
@@ -63,7 +75,8 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 							agentState.getServerCommand(
 								*correctedMessage.ID,
 								commandName,
-								argsData)...)
+								argsData,
+								reactiveResultSink)...)
 					}
 				case []map[string]interface{}:
 					// ok, it's a list of commands, for a fuck sake...
@@ -80,7 +93,8 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 								agentState.getServerCommand(
 									*correctedMessage.ID,
 									commandName,
-									argsData)...)
+									argsData,
+									reactiveResultSink)...)
 						}
 					}
 				default:
@@ -98,8 +112,13 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 
 var notesLock = sync.RWMutex{}
 var notes = make(map[string][]string)
+var listAllNotesSubs = []func(string, string){}
+var sectionSubs = make(map[string][]func(string, string))
 
-func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandName string, args map[string]interface{}) []*cmds.ClientRequest {
+func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
+	commandName string,
+	args map[string]interface{},
+	reactiveResultSink func(string, string)) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	clientRequests = append(clientRequests, &cmds.ClientRequest{
 		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
@@ -132,14 +151,29 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 		notesLock.Lock()
 		if notes[sectionString] == nil {
 			notes[sectionString] = make([]string, 0)
+			// it's a new section, let's re-list all notes now
+			notesList := listAllNotes()
+			for _, sub := range listAllNotesSubs {
+				sub(resultId, notesList)
+			}
 		}
+		var textToAdd = ""
 		switch text.(type) {
 		case string:
-			notes[sectionString] = append(notes[sectionString], text.(string))
+			textToAdd = text.(string)
 		default:
 			jsonText, _ := json.Marshal(text)
-			notes[sectionString] = append(notes[sectionString], string(jsonText))
+			textToAdd = string(jsonText)
 		}
+		notes[sectionString] = append(notes[sectionString], textToAdd)
+
+		// now, let's check if there are subscriptions for this section
+		if subs, exists := sectionSubs[sectionString]; exists {
+			for _, sub := range subs {
+				sub(resultId, textToAdd)
+			}
+		}
+
 		notesLock.Unlock()
 		clientRequests[0].SpecialCaseResponse = "Ok, note saved."
 
@@ -156,16 +190,25 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 		} else {
 			notesLock.RLock()
 			var texts []string
+			var sectionName string
 			var found bool = false
 			switch section.(type) {
 			case string:
-				texts, found = notes[section.(string)]
+				sectionName = section.(string)
+				texts, found = notes[sectionName]
 			case []interface{}:
 				if len(section.([]interface{})) == 1 {
-					texts, found = notes[section.([]interface{})[0].(string)]
+					sectionName = section.([]interface{})[0].(string)
+					texts, found = notes[sectionName]
 				}
 			}
 			notesLock.RUnlock()
+			notesLock.Lock()
+			if sectionSubs[sectionName] == nil {
+				sectionSubs[sectionName] = make([]func(string, string), 0)
+			}
+			sectionSubs[sectionName] = append(sectionSubs[sectionName], reactiveResultSink)
+			notesLock.Unlock()
 			if found {
 				// we should return all possible notes here, so...
 				if len(texts) == 1 {
@@ -187,12 +230,13 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 			}
 		}
 	case "list-notes":
-		clientRequests[0].SpecialCaseResponse = "Notes:\n"
 		notesLock.RLock()
-		for section, text := range notes {
-			clientRequests[0].SpecialCaseResponse += fmt.Sprintf("%s: %s\n", section, text)
-		}
+		notesList := listAllNotes()
 		notesLock.RUnlock()
+		clientRequests[0].SpecialCaseResponse = notesList
+		notesLock.Lock()
+		listAllNotesSubs = append(listAllNotesSubs, reactiveResultSink)
+		notesLock.Unlock()
 	case "final-report":
 		data := args["text"]
 		switch data.(type) {
@@ -307,6 +351,14 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string, commandNam
 	clientRequests[0].CorrelationId = resultId
 
 	return clientRequests
+}
+
+func listAllNotes() string {
+	notesList := "Notes:\n"
+	for section, _ := range notes {
+		notesList += fmt.Sprintf("- %s\n", section)
+	}
+	return notesList
 }
 
 func appendFile(fname string, text string) {
