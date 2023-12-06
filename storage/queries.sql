@@ -176,11 +176,12 @@ CREATE TABLE if not exists `message_links` (
                                  `id` varchar(255) NOT NULL,
                                  `reply_to` varchar(255) NOT NULL,
                                  KEY `id` (`id`),
-                                 KEY `reply_to` (`reply_to`)
+                                 KEY `reply_to` (`reply_to`),
+                                 unique (id, reply_to)
 ) ENGINE=InnoDB;
 
 -- name: save-messages-trace
-insert into messages (id, role, content) values (?, ?, ?);
+insert into messages (id, role, content) values (?, ?, ?) on duplicate key update role=values(role);
 
 -- name: save-message-link
-insert into message_links (id, reply_to) values (?,?);
+insert into message_links (id, reply_to) values (?,?) on duplicate key update id=values(id);
