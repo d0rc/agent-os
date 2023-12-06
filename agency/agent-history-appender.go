@@ -2,7 +2,11 @@ package agency
 
 import (
 	"fmt"
+	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/engines"
+	os_client "github.com/d0rc/agent-os/os-client"
 	"sync/atomic"
+	"time"
 )
 
 func (agentState *GeneralAgentInfo) historyAppender() {
@@ -31,6 +35,10 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 				agentState.History = append(agentState.History, message)
 				atomic.AddInt32(&agentState.historySize, 1)
 			}
+
+			_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+				WriteMessagesTrace: []*engines.Message{message},
+			}, 120*time.Second, os_client.REP_IO)
 		}
 	}
 }

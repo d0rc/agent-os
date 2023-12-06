@@ -48,7 +48,10 @@ func (s *Storage) execDDLs() {
 	for qName := range s.Db.GetQueries() {
 		if strings.HasPrefix(qName, "ddl-") {
 			s.lg.Info().Str("name", qName).Msg("running DDL")
-			s.Db.ShouldExec(qName)
+			_, err := s.Db.Exec(qName)
+			if err != nil {
+				s.lg.Fatal().Err(err).Msgf("error running DDL: %s", qName)
+			}
 		}
 	}
 }

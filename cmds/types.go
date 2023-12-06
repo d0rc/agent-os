@@ -1,6 +1,9 @@
 package cmds
 
-import borrow_engine "github.com/d0rc/agent-os/borrow-engine"
+import (
+	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
+	"github.com/d0rc/agent-os/engines"
+)
 
 type GetPageRequest struct {
 	Url           string `json:"url"`
@@ -105,6 +108,7 @@ type ClientRequest struct {
 	SpecialCaseResponse   string                    `json:"special-case-response"`
 	GetCacheRecords       []GetCacheRecord          `json:"get-cache-records"`
 	SetCacheRecords       []SetCacheRecord          `json:"set-cache-records"`
+	WriteMessagesTrace    []*engines.Message        `json:"write-messages-trace"`
 }
 
 type ServerResponse struct {

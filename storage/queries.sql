@@ -160,3 +160,27 @@ from compute_cache where namespace =? and task_hash =?;
 
 -- name: save-task-cache-record
 insert into compute_cache (namespace, task_hash, task_result) values (?,?,?);
+
+-- name: ddl-create-messages
+CREATE TABLE `messages` (
+                            `id` varchar(255) NOT NULL,
+                            `role` varchar(255) DEFAULT NULL,
+                            `content` mediumtext,
+                            PRIMARY KEY (`id`),
+                            KEY `role` (`role`),
+                            FULLTEXT KEY `content` (`content`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- name: ddl-create-message-links
+CREATE TABLE `message_links` (
+                                 `id` varchar(255) NOT NULL,
+                                 `reply_to` varchar(255) NOT NULL,
+                                 KEY `id` (`id`),
+                                 KEY `reply_to` (`reply_to`)
+) ENGINE=InnoDB;
+
+-- name: save-messages-trace
+insert into messages (id, role, content) values (?, ?, ?);
+
+-- name: save-message-link
+insert into message_links (id, reply_to) values (?,?);

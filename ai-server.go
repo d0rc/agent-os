@@ -104,6 +104,10 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 		result, err = cmds.ProcessSetCacheRecords(request.SetCacheRecords, ctx, request.ProcessName)
 	}
 
+	if request.WriteMessagesTrace != nil && len(request.WriteMessagesTrace) > 0 {
+		result, err = cmds.ProcessWriteMessagesTrace(request.WriteMessagesTrace, ctx, request.ProcessName)
+	}
+
 	if err != nil {
 		return nil, err
 	}
