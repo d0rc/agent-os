@@ -113,5 +113,7 @@ func isRequestEmpty(req *cmds.ClientRequest) bool {
 	isEmpty = isEmpty && (req.SetCacheRecords == nil || len(req.SetCacheRecords) == 0)
 	isEmpty = isEmpty && (req.GoogleSearchRequests == nil || len(req.GoogleSearchRequests) == 0)
 
+	isEmpty = isEmpty && (req.WriteMessagesTrace == nil || len(req.WriteMessagesTrace) == 0)
+
 	return isEmpty
 }

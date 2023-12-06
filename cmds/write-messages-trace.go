@@ -16,7 +16,7 @@ func ProcessWriteMessagesTrace(traces []*engines.Message, ctx *server.Context, p
 		}
 
 		for replyTo := range traces[idx].ReplyTo {
-			_, err = ctx.Storage.Db.Exec("save-messages-link",
+			_, err = ctx.Storage.Db.Exec("save-message-link",
 				*traces[idx].ID,
 				replyTo)
 			if err != nil {
