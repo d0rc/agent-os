@@ -28,5 +28,5 @@ func ProcessWriteMessagesTrace(traces []*engines.Message, ctx *server.Context, p
 		}
 	}
 
-	return nil, nil
+	return &ServerResponse{}, nil
 }
