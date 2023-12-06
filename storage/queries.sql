@@ -162,7 +162,7 @@ from compute_cache where namespace =? and task_hash =?;
 insert into compute_cache (namespace, task_hash, task_result) values (?,?,?);
 
 -- name: ddl-create-messages
-CREATE TABLE `messages` (
+CREATE TABLE if not exists `messages` (
                             `id` varchar(255) NOT NULL,
                             `role` varchar(255) DEFAULT NULL,
                             `content` mediumtext,
@@ -172,7 +172,7 @@ CREATE TABLE `messages` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- name: ddl-create-message-links
-CREATE TABLE `message_links` (
+CREATE TABLE if not exists `message_links` (
                                  `id` varchar(255) NOT NULL,
                                  `reply_to` varchar(255) NOT NULL,
                                  KEY `id` (`id`),
