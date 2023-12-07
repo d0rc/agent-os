@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/utils"
@@ -10,6 +11,7 @@ import (
 )
 
 var pathChannel = make(chan []string, 10)
+var dbHost = flag.String("db-host", "167.235.115.231", "database host")
 
 func main() {
 	termUi := false
@@ -18,7 +20,7 @@ func main() {
 	// it's a utility function, which does the following:
 	// - it looks for all the messages with given string inside
 	// - it collects all the inference steps which could lead to this messages
-	db, err := storage.NewStorage(lg, "167.235.115.231")
+	db, err := storage.NewStorage(lg, *dbHost)
 	if err != nil {
 		lg.Fatal().Err(err).Msg("error initializing storage")
 	}
