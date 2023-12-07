@@ -185,3 +185,15 @@ insert into messages (id, role, content) values (?, ?, ?) on duplicate key updat
 
 -- name: save-message-link
 insert into message_links (id, reply_to) values (?,?) on duplicate key update id=values(id);
+
+-- name: get-message-by-id
+select id, role, content from messages where id =?;
+
+-- name: get-messages-by-text
+select id, role, content from messages where content like ?;
+
+-- name: get-message-links-by-id
+select id, reply_to from message_links where id = ?;
+
+-- name: get-message-links-by-reply-to
+select id, reply_to from message_links where reply_to =?;

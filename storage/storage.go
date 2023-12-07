@@ -19,10 +19,13 @@ type Storage struct {
 	lg zerolog.Logger
 }
 
-func NewStorage(lg zerolog.Logger) (*Storage, error) {
+func NewStorage(lg zerolog.Logger, host string) (*Storage, error) {
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	db, err := unidb.NewUniDB().
 		WithDB("ai_srv").
-		WithHost("127.0.0.1").
+		WithHost(host).
 		WithParseTime().
 		WithMaxConns(4).
 		WithMaxIdleConnTime(120 * time.Second).

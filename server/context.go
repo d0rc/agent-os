@@ -34,7 +34,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 		return nil, err
 	}
 
-	db, err := storage.NewStorage(lg)
+	db, err := storage.NewStorage(lg, "")
 	if err != nil {
 		fmt.Printf("error creating storage: %v\n", aurora.BrightRed(err))
 		fmt.Printf("confgiration file used: %s\n", configPath)
