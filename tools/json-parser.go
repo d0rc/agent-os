@@ -2,16 +2,18 @@ package tools
 
 import (
 	"fmt"
+	"strings"
+
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/server"
 	zlog "github.com/rs/zerolog/log"
-	"strings"
 )
 
 func ParseJSON(sourceData string, parser func(string) error) error {
 	// starting with some symbol, it's JSON here, and it ends with some symbol
 	// first symbol of JSON can be: '"', "{", "["
+	sourceData = cleanJSONString(sourceData)
 	sourceData = strings.TrimSpace(strings.ReplaceAll(sourceData, "\\|", "|"))
 
 	if len(sourceData) == 1 {
@@ -43,6 +45,11 @@ func ParseJSON(sourceData string, parser func(string) error) error {
 		}*/
 
 	return err
+}
+
+func cleanJSONString(input string) string {
+	// Replace <0x0A> with \n or remove it if newlines are not required
+	return strings.Replace(input, "<0x0A>", "\n", -1)
 }
 
 func actualParse(newSourceData string, parser func(string) error) error {
