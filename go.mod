@@ -19,6 +19,7 @@ require (
 	github.com/rs/zerolog v1.31.0
 	github.com/serpapi/google-search-results-golang v0.0.0-20230616000151-95707d993dc6
 	github.com/shirou/gopsutil v3.21.11+incompatible
+	github.com/unum-cloud/usearch/golang v0.0.0-20231126121226-c2463ca3a043
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
 	golang.org/x/crypto v0.12.0
 	golang.org/x/term v0.11.0
