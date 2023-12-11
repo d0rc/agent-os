@@ -146,7 +146,16 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 			clientRequests[0].SpecialCaseResponse = "No section or text specified."
 			break
 		}
-		sectionString := section.(string)
+		var sectionString string
+		switch section.(type) {
+		case string:
+			sectionString = section.(string)
+		}
+
+		if sectionString == "" {
+			clientRequests[0].SpecialCaseResponse = "No single section name specified."
+			break
+		}
 
 		notesLock.Lock()
 		if notes[sectionString] == nil {
