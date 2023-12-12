@@ -175,7 +175,8 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			stopTokens[0] = batch[0].Req.StopTokens[0]
 		}
 		req := &togetherRequest{
-			Model:       "mistralai/Mistral-7B-Instruct-v0.1",
+			// Model:       "mistralai/Mistral-7B-Instruct-v0.1",
+			Model:       "mistralai/Mixtral-8x7B-Instruct-v0.1",
 			Prompt:      batch[0].Req.RawPrompt,
 			Temperature: batch[0].Req.Temperature,
 			TopP:        0.9,
