@@ -91,7 +91,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 
 		// whatever happened here, it's not of our business, we should just log it
 		if err != nil {
-			zlog.Error().Err(err).
+			zlog.Error().
 				Msgf("error in request: %v, %s", err, inferenceEngine.EndpointUrl)
 			return nil, err
 		}
