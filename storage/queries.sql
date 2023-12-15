@@ -109,7 +109,8 @@ create table if not exists llm_cache (
     `cache_hits` int unsigned NOT NULL,
     `generation_result` mediumblob NOT NULL,
     PRIMARY KEY (`id`),
-    KEY `prompt_length` (`prompt_length`,`prompt`(900)));
+    KEY `prompt_length` (`prompt_length`,`prompt`(900))
+ );
 
 -- name: insert-llm-cache-record
 insert into llm_cache (model, prompt, prompt_length, created_at, generation_settings, cache_hits, generation_result)
