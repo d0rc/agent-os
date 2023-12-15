@@ -83,7 +83,8 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 			node.RemoteEngine.EmbeddingsFailed {
 			// engine failed to run completion and embeddings
 			// we can't use it
-			zlog.Info().Str("url", node.EndpointUrl).Msg("compute node failed to run completion and embeddings")
+			zlog.Info().Msgf("compute node failed to run completion and embeddings: %s",
+				node.EndpointUrl)
 			autodetectFinished <- node
 		} else {
 			autodetectFinished <- node
