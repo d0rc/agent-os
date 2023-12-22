@@ -7,6 +7,8 @@ import (
 	zlog "github.com/rs/zerolog/log"
 	"io"
 	"net/http"
+	"strings"
+	"time"
 )
 
 func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask) ([]*Message, error) {
@@ -18,6 +20,12 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	if inferenceEngine.Protocol == "http-openai" {
+		if len(inferenceEngine.Models) == 0 {
+			err := fetchInferenceEngineModels(inferenceEngine)
+			if err != nil {
+				inferenceEngine.Models = []string{""}
+			}
+		}
 		type commandList struct {
 			Prompts     []string `json:"prompt"`
 			N           int      `json:"n"`
@@ -58,10 +66,11 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 			cmd := &commandList{
 				Prompts:     promptBodies,
 				N:           1,
-				Max:         512,
+				Max:         4096,
 				Stop:        stopTokens,
 				Temperature: batch[0].Req.Temperature,
 				BestOf:      batch[0].Req.BestOf,
+				Model:       inferenceEngine.Models[0],
 			}
 
 			commandBuffer, err = json.Marshal(cmd)
@@ -76,6 +85,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 				Stop:        stopTokens,
 				Temperature: batch[0].Req.Temperature,
 				BestOf:      batch[0].Req.BestOf,
+				Model:       inferenceEngine.Models[0],
 			}
 
 			commandBuffer, err = json.Marshal(cmd)
@@ -249,4 +259,64 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	return nil, fmt.Errorf("unsupported protocol %s", inferenceEngine.Protocol)
+}
+
+type pointlessOpenAIList struct {
+	Object string `json:"object"`
+	Data   []struct {
+		ModelId string `json:"id"`
+	} `json:"data"`
+}
+
+func fetchInferenceEngineModels(engine *RemoteInferenceEngine) error {
+	client := http.Client{Timeout: 120 * time.Second}
+
+	if engine.ModelsEndpoint == "" {
+		engine.ModelsEndpoint = guessModelsEndpoint(engine)
+	}
+
+	req, err := http.NewRequest("GET", engine.ModelsEndpoint, nil)
+	if err != nil {
+		return fmt.Errorf("error creating request: %v", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", engine.Token))
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error sending request: %v", err)
+	}
+
+	defer resp.Body.Close()
+	result, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response: %v", err)
+	}
+
+	models := &pointlessOpenAIList{}
+
+	err = json.Unmarshal(result, models)
+	if err != nil {
+		return fmt.Errorf("error unmarshalling response: %v", err)
+	}
+
+	if len(models.Data) > 0 {
+		engine.Models = append(engine.Models, models.Data[0].ModelId)
+	}
+
+	return nil
+}
+
+func guessModelsEndpoint(engine *RemoteInferenceEngine) string {
+	if strings.Contains(engine.EndpointUrl, "/v1/") {
+		// strings is http://..../.../v1/something
+		// we need to remove something and replace it with models:
+		// like this: http://..../.../v1/models/
+
+		// first let's trim the string on /v1/, removing something
+		tokens := strings.Split(engine.EndpointUrl, "/v1/")
+		return tokens[0] + "/v1/models"
+	}
+
+	return engine.EndpointUrl
 }

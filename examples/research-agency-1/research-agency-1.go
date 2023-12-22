@@ -27,7 +27,8 @@ func main() {
 
 	lg.Info().Interface("agencySettings", agencySettings).Msg("parsed agency")
 
-	client := os_client.NewAgentOSClient("http://167.235.115.231:9000")
+	//client := os_client.NewAgentOSClient("http://167.235.115.231:9000")
+	client := os_client.NewAgentOSClient("http://127.0.0.1:9000")
 	agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
 
 	var spawningCallback func(name, goal string) chan string

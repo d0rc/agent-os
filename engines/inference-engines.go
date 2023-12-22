@@ -66,6 +66,7 @@ type RemoteInferenceEngine struct {
 	EmbeddingsFailed      bool
 	Protocol              string
 	Token                 string
+	ModelsEndpoint        string
 }
 
 func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
