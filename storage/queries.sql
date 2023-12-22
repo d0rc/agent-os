@@ -198,3 +198,18 @@ select id, reply_to from message_links where id = ?;
 
 -- name: get-message-links-by-reply-to
 select id, reply_to from message_links where reply_to =?;
+
+-- name: get-paired-embeddings
+select
+    lle1.id as lle1_id,
+    lle1.namespace as lle1_namespace,
+    lle1.namespace_id as lle1_namespace_id,
+    lle1.embedding as lle1_embedding,
+    lle2.id as lle2_id,
+    lle2.namespace as lle2_namespace,
+    lle2.namespace_id as lle2_namespace_id,
+    lle2.embedding as lle2_embedding
+from llm_embeddings as lle1 left join llm_embeddings as lle2 on lle1.namespace_id = lle2.namespace_id
+where
+    lle2.namespace = "llm-cache-generation" and
+    lle1.namespace = "llm-cache-prompt";
