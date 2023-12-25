@@ -21,7 +21,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		}
 
 		// let's go to cross roads here, to see if we should dive deeper here
-		voteRating, err := agentState.VoteForAction(agentState.Settings.GetAgentInitialGoal(), parsedString)
+		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), parsedString)
 		if err != nil {
 			fmt.Printf("Error voting for action: %v\n", err)
 			continue

@@ -29,6 +29,7 @@ type GeneralAgentSettings struct {
 type ResponseFormatType map[string]interface{}
 type PromptBasedAgentSettings struct {
 	Prompt          string             `yaml:"prompt"`
+	Vars            map[string]any     `yaml:"vars"`
 	ResponseFormat  ResponseFormatType `yaml:"response-format"`
 	ResponseParsers []ResponseParser   `yaml:"response-parsers"`
 }

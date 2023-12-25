@@ -6,7 +6,6 @@ import (
 	"github.com/d0rc/agent-os/agency"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/utils"
-	"strings"
 	"time"
 )
 
@@ -38,14 +37,7 @@ func main() {
 			lg.Fatal().Err(err).Msg("failed to parse agency")
 		}
 		clonedSettings[0].Agent.Name = name
-		promptLines := strings.Split(clonedSettings[0].Agent.PromptBased.Prompt, "\n")
-		promptLines[0] = fmt.Sprintf("You are an AI Agent, your role is - %s. Your current goal is - %s",
-			name, goal)
-		clonedSettings[0].Agent.PromptBased.Prompt = strings.Join(promptLines, "\n")
-
-		finalPrompt := strings.Join(promptLines, "\n")
-		clonedSettings[0].Agent.PromptBased.Prompt = finalPrompt
-
+		clonedSettings[0].Agent.PromptBased.Vars[agency.IV_GOAL] = goal
 		newAgentState := agency.NewGeneralAgentState(client, "", clonedSettings[0])
 		finalReportsStream := make(chan string, 10)
 

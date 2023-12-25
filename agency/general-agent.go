@@ -45,6 +45,10 @@ func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseP
 	return agentState.Settings.ParseResponse(response)
 }
 
+const (
+	IV_GOAL = "goal"
+)
+
 func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, config *AgentSettings) *GeneralAgentInfo {
 	if systemName == "" {
 		systemName = tools.GetSystemName(config.Agent.Name)
@@ -69,6 +73,11 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		terminalsVisitsMap: make(map[string]int),
 		terminalsVotesMap:  make(map[string]float32),
 		terminalsLock:      sync.RWMutex{},
+	}
+
+	// copy all input variables from the config
+	for k, v := range config.Agent.PromptBased.Vars {
+		agentState.InputVariables[k] = v
 	}
 
 	go agentState.jobsChannelManager()

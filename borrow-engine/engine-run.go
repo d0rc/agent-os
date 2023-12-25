@@ -62,6 +62,17 @@ func (ie *InferenceEngine) Run() {
 					ie.ProcessesTotalJobs[job.Process]++
 					jobsBuffer[job.Priority] = append(jobsBuffer[job.Priority], job)
 				}
+
+				jobsLeft := len(ie.IncomingJobs)
+				if jobsLeft > 0 {
+					for i := 0; i < jobsLeft; i++ {
+						jobs = <-ie.IncomingJobs
+						for _, job := range jobs {
+							ie.ProcessesTotalJobs[job.Process]++
+							jobsBuffer[job.Priority] = append(jobsBuffer[job.Priority], job)
+						}
+					}
+				}
 				jobsBufferLock.Unlock()
 				attemptProcessing = true
 			}
