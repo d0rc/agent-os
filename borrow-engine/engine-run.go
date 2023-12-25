@@ -56,13 +56,13 @@ func (ie *InferenceEngine) Run() {
 			case _ = <-ie.InferenceDone:
 				attemptProcessing = true
 			case jobs := <-ie.IncomingJobs:
-				// fmt.Printf("Recieved %d jobs\n", len(jobs))
+				// fmt.Printf("Received %d jobs\n", len(jobs))
+				jobsBufferLock.Lock()
 				for _, job := range jobs {
-					jobsBufferLock.Lock()
 					ie.ProcessesTotalJobs[job.Process]++
 					jobsBuffer[job.Priority] = append(jobsBuffer[job.Priority], job)
-					jobsBufferLock.Unlock()
 				}
+				jobsBufferLock.Unlock()
 				attemptProcessing = true
 			}
 		}

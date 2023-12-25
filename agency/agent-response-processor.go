@@ -380,7 +380,7 @@ func appendFile(fname string, text string) {
 
 	defer f.Close()
 
-	if _, err := f.WriteString(text + "\n"); err != nil {
+	if _, err := f.WriteString("--=== new report ===--\n" + text + "\n"); err != nil {
 		fmt.Printf("failed writing to file: %s\n", err)
 		return
 	}
