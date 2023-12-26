@@ -36,6 +36,7 @@ func main() {
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to parse agency")
 		}
+
 		clonedSettings[0].Agent.Name = name
 		clonedSettings[0].Agent.PromptBased.Vars[agency.IV_GOAL] = goal
 		newAgentState := agency.NewGeneralAgentState(client, "", clonedSettings[0])
@@ -52,4 +53,10 @@ func main() {
 	agentState.ToTPipeline()
 
 	fmt.Printf("Done in %v\n", time.Since(ts))
+}
+
+func deepCopy(settings *agency.AgentSettings) *agency.AgentSettings {
+	newSettings := &agency.AgentSettings{}
+	*newSettings = *settings
+	return newSettings
 }
