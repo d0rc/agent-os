@@ -34,7 +34,7 @@ type InferenceEngine struct {
 type InferenceEngineSettings struct {
 	TopInterval time.Duration
 	TermUI      bool
-	LogChan     chan []byte
+	LogChan     chan string
 }
 
 func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *InferenceEngine {

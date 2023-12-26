@@ -91,7 +91,7 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 		select {
 		case <-timer.C:
 		case logLine := <-ie.settings.LogChan:
-			lastLogLines = append(lastLogLines, string(logLine))
+			lastLogLines = append(lastLogLines, logLine)
 			if len(lastLogLines) > 100 {
 				lastLogLines = lastLogLines[1:]
 			}

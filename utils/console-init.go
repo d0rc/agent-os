@@ -13,17 +13,17 @@ import (
 )
 
 type ChannelWriter struct {
-	Channel chan []byte
+	Channel chan string
 }
 
 func (cw ChannelWriter) Write(p []byte) (n int, err error) {
-	cw.Channel <- p
+	cw.Channel <- string(p)
 	return len(p), nil
 }
 
-var OutputChannel = make(chan []byte, 1024)
+var OutputChannel = make(chan string, 4096)
 
-func ConsoleInit(name string, termUi *bool) (zerolog.Logger, chan []byte) {
+func ConsoleInit(name string, termUi *bool) (zerolog.Logger, chan string) {
 	flag.Parse()
 	logsInit(termUi)
 

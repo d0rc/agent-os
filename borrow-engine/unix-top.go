@@ -95,14 +95,16 @@ func (ie *InferenceEngine) buildTopString(jobsBuffer map[JobPriority][]*ComputeJ
 		return processInfo[i].TotalJobs > processInfo[j].TotalJobs
 	})
 
-	for _, processData := range processInfo {
+	for idx, processData := range processInfo {
 		processesHeadersLine := []string{
 			processData.Name,
 			fmt.Sprintf("%d", ie.ProcessesTotalJobs[processData.Name]),
 			fmt.Sprintf("%s", ie.ProcessesTotalTimeConsumed[processData.Name]),
 			fmt.Sprintf("%s", fmt.Sprintf("%4.4f", float64(ie.ProcessesTotalTimeWaiting[processData.Name]/time.Millisecond)/float64(ie.ProcessesTotalJobs[processData.Name]))),
 		}
-		tw.Append(processesHeadersLine)
+		if idx < 7 {
+			tw.Append(processesHeadersLine)
+		}
 		processesHeadersLines = append(processesHeadersLines, processesHeadersLine)
 	}
 	lock.RUnlock()

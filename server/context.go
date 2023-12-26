@@ -25,7 +25,7 @@ type Context struct {
 type Settings struct {
 	TopInterval time.Duration
 	TermUI      bool
-	LogChan     chan []byte
+	LogChan     chan string
 }
 
 func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*Context, error) {
