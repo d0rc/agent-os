@@ -8,6 +8,7 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -26,15 +27,12 @@ func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription
 	}
 	votesCacheLock.RUnlock()
 
+	question := "How likely is it that executing the command will lead to achieving the goal?"
 	systemMessage := `Given goal:
-
 %s
-
 And a command:
-
 %s
-
-How likely is executing the command will lead to achieving the goal?
+%s
 Respond in the JSON format:
 {
     "thought": "thought text, which provides critics of possible solutions",
@@ -43,7 +41,7 @@ Respond in the JSON format:
     "rate": "rate probability on scale from 0 to 10"
 }`
 
-	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n")
+	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n", question)
 	type votersResponse struct {
 		Thought   string      `json:"thought"`
 		Criticism string      `json:"criticism"`
@@ -84,7 +82,9 @@ retryVoting:
 				continue
 			}
 			currentVote := &votersResponse{}
+			var parsedVoteString string
 			if err := tools.ParseJSON(choice, func(s string) error {
+				parsedVoteString = s
 				return json.Unmarshal([]byte(s), currentVote)
 			}); err != nil {
 				fmt.Printf("error parsing voter's JSON: %s\n", err)
@@ -108,6 +108,17 @@ retryVoting:
 				currentVoteRate = float32(currentVote.Rate.(int))
 			default:
 				fmt.Printf("Don't know what to do with vote rate: %v\n", currentVote.Rate)
+				continue
+			}
+
+			if WriteVotesLog {
+				appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
+					initialGoal,
+					strings.TrimSpace(actionDescription),
+					question,
+					strings.TrimSpace(parsedVoteString),
+					currentVoteRate,
+				))
 			}
 			currentRating += currentVoteRate
 			numberOfVotes++
