@@ -86,112 +86,147 @@ func (ie *InferenceEngine) Run() {
 		// attempt to process the jobs
 		tsScheduling := time.Now()
 		for nodeIdx, _ := range ie.Nodes {
+		tryGetOneMoreJob:
 			if ie.Nodes[nodeIdx].RequestsRunning >= ie.Nodes[nodeIdx].MaxRequests {
 				continue
 			}
 			if time.Since(ie.Nodes[nodeIdx].LastFailure) < 5*time.Second {
 				continue
 			}
-			// we have an available node...! let's try to
-			// get node.MaxBatchSize jobs from the buffer
-			// but we can only run jobs of the same type
+
 			batch := map[JobType][]*ComputeJob{}
-
-			canSend := false
-			var haveAtLeastOneJobType JobType = JT_NotAJob
 			var canSendJobType JobType = JT_NotAJob
+			if ie.Nodes[nodeIdx].MaxBatchSize == 1 {
+				// let's just pick a single job with lowest priority
+				jobsBufferLock.Lock()
+				for prio := PRIO_System; prio <= PRIO_Background; prio++ {
+					if len(jobsBuffer[prio]) > 0 {
+						// let's pick the first job with compatible job type
+						for _, job := range jobsBuffer[prio] {
+							compatible := false
+							for _, nodeJobType := range ie.Nodes[nodeIdx].JobTypes {
+								if job.JobType == nodeJobType {
+									compatible = true
+									break
+								}
+							}
 
-			for priority := PRIO_System; priority <= PRIO_Background; priority++ {
-				jobsBufferLock.RLock()
-				jobsByType := getJobsByType(jobsBuffer[priority], ie.Nodes[nodeIdx].JobTypes)
-				jobsBufferLock.RUnlock()
-				for jobType, jobs := range jobsByType {
-					if len(jobs) == 0 {
-						continue
-					}
-					// we have some jobs to run
-					// let's try to fill our batch
-					for _, job := range jobs {
-						batch[jobType] = append(batch[jobType], job)
-						haveAtLeastOneJobType = jobType
-						if len(batch[jobType]) == ie.Nodes[nodeIdx].MaxBatchSize {
-							canSend = true
-							canSendJobType = jobType
+							if compatible {
+								canSendJobType = job.JobType
+								batch[job.JobType] = append(batch[job.JobType], job)
+								break
+							}
+						}
+
+						if len(batch[canSendJobType]) > 0 {
 							break
 						}
 					}
 				}
+				jobsBufferLock.Unlock()
 
-				if haveAtLeastOneJobType != JT_NotAJob {
-					break
-				}
-			}
-
-			if haveAtLeastOneJobType != JT_NotAJob && time.Since(ie.Nodes[nodeIdx].LastIdleAt) > 50*time.Millisecond {
-				canSend = true
-
-				if canSendJobType == JT_NotAJob {
-					canSendJobType = haveAtLeastOneJobType
-				}
-			}
-
-			// fmt.Printf("canSend: %v, canSendJobType: %v, haveAtLeastOneJobType: %v\n",
-			//	canSend, canSendJobType, haveAtLeastOneJobType)
-
-			if !canSend {
-				continue
-			}
-			// check if we need to switch job types because other one has lower priorities
-			perBatchMinPrio := make(map[JobType]JobPriority)
-			minPrioJobType := JT_NotAJob
-			for jobType, jobs := range batch {
-				if len(jobs) == 0 {
-					perBatchMinPrio[jobType] = PRIO_Background
+				if len(batch[canSendJobType]) == 0 {
 					continue
 				}
-				minPriority := jobs[0].Priority
-				minPrioJobType = jobs[0].JobType
-				for _, job := range jobs {
-					if job.Priority < minPriority {
-						minPriority = job.Priority
-						minPrioJobType = job.JobType
+			} else {
+				// we have an available node...! let's try to
+				// get node.MaxBatchSize jobs from the buffer
+				// but we can only run jobs of the same type
+				canSend := false
+				var haveAtLeastOneJobType JobType = JT_NotAJob
+
+				for priority := PRIO_System; priority <= PRIO_Background; priority++ {
+					jobsBufferLock.RLock()
+					jobsByType := getJobsByType(jobsBuffer[priority], ie.Nodes[nodeIdx].JobTypes)
+					jobsBufferLock.RUnlock()
+					for jobType, jobs := range jobsByType {
+						if len(jobs) == 0 {
+							continue
+						}
+						// we have some jobs to run
+						// let's try to fill our batch
+						for _, job := range jobs {
+							batch[jobType] = append(batch[jobType], job)
+							haveAtLeastOneJobType = jobType
+							if len(batch[jobType]) == ie.Nodes[nodeIdx].MaxBatchSize {
+								canSend = true
+								canSendJobType = jobType
+								break
+							}
+						}
+					}
+
+					if haveAtLeastOneJobType != JT_NotAJob {
+						break
 					}
 				}
-			}
-			if canSendJobType != minPrioJobType && minPrioJobType != JT_NotAJob {
-				canSendJobType = minPrioJobType
-			}
 
-			// let's check node can run this types of jobs
-			jobTypesSwitchedAlready := false
-		switchJobTypes:
-			if len(batch[canSendJobType]) == 0 {
-				continue
-			}
-			nodeIsCompatible := false
-			for _, jt := range ie.Nodes[nodeIdx].JobTypes {
-				if jt == canSendJobType {
-					nodeIsCompatible = true
-					break
+				if haveAtLeastOneJobType != JT_NotAJob { //&& time.Since(ie.Nodes[nodeIdx].LastIdleAt) > 1*time.Millisecond {
+					canSend = true
+
+					if canSendJobType == JT_NotAJob {
+						canSendJobType = haveAtLeastOneJobType
+					}
 				}
-			}
-			if !nodeIsCompatible {
-				if jobTypesSwitchedAlready {
+
+				// fmt.Printf("canSend: %v, canSendJobType: %v, haveAtLeastOneJobType: %v\n",
+				//	canSend, canSendJobType, haveAtLeastOneJobType)
+
+				if !canSend {
 					continue
 				}
-				// either pick another job type, or just continue
-				// let's see if we have another job type
-				if canSendJobType == JT_Embeddings {
-					canSendJobType = JT_Completion
-					jobTypesSwitchedAlready = true
-					goto switchJobTypes
-				} else if canSendJobType == JT_Completion {
-					canSendJobType = JT_Embeddings
-					jobTypesSwitchedAlready = true
-					goto switchJobTypes
+				// check if we need to switch job types because other one has lower priorities
+				perBatchMinPrio := make(map[JobType]JobPriority)
+				minPrioJobType := JT_NotAJob
+				for jobType, jobs := range batch {
+					if len(jobs) == 0 {
+						perBatchMinPrio[jobType] = PRIO_Background
+						continue
+					}
+					minPriority := jobs[0].Priority
+					minPrioJobType = jobs[0].JobType
+					for _, job := range jobs {
+						if job.Priority < minPriority {
+							minPriority = job.Priority
+							minPrioJobType = job.JobType
+						}
+					}
+				}
+				if canSendJobType != minPrioJobType && minPrioJobType != JT_NotAJob {
+					canSendJobType = minPrioJobType
 				}
 
-				continue
+				// let's check node can run this types of jobs
+				jobTypesSwitchedAlready := false
+			switchJobTypes:
+				if len(batch[canSendJobType]) == 0 {
+					continue
+				}
+				nodeIsCompatible := false
+				for _, jt := range ie.Nodes[nodeIdx].JobTypes {
+					if jt == canSendJobType {
+						nodeIsCompatible = true
+						break
+					}
+				}
+				if !nodeIsCompatible {
+					if jobTypesSwitchedAlready {
+						continue
+					}
+					// either pick another job type, or just continue
+					// let's see if we have another job type
+					if canSendJobType == JT_Embeddings {
+						canSendJobType = JT_Completion
+						jobTypesSwitchedAlready = true
+						goto switchJobTypes
+					} else if canSendJobType == JT_Completion {
+						canSendJobType = JT_Embeddings
+						jobTypesSwitchedAlready = true
+						goto switchJobTypes
+					}
+
+					continue
+				}
 			}
 
 			// we have a batch to send
@@ -256,6 +291,10 @@ func (ie *InferenceEngine) Run() {
 					}
 					jobsBufferLock.Unlock()
 				}
+			}
+
+			if ie.Nodes[nodeIdx].RequestsRunning < ie.Nodes[nodeIdx].MaxRequests {
+				goto tryGetOneMoreJob
 			}
 		}
 

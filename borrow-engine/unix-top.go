@@ -104,8 +104,8 @@ func (ie *InferenceEngine) buildTopString(jobsBuffer map[JobPriority][]*ComputeJ
 		}
 		if idx < 7 {
 			tw.Append(processesHeadersLine)
+			processesHeadersLines = append(processesHeadersLines, processesHeadersLine)
 		}
-		processesHeadersLines = append(processesHeadersLines, processesHeadersLine)
 	}
 	lock.RUnlock()
 	tw.Render()

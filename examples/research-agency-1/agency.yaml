@@ -54,7 +54,7 @@
       response-format:
         thoughts: thought text, which provides critics of possible solutions
         criticism: constructive self-criticism, question your assumptions
-        action: action description, which should clearly state the task
+        # action: action description, which should clearly state the task
         command:
           name: name of the command from the list above
           args: {}
