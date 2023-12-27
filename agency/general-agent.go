@@ -2,14 +2,15 @@ package agency
 
 import (
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	pongo2 "github.com/flosch/pongo2/v6"
-	"strings"
-	"sync"
-	"time"
 )
 
 type GeneralAgentInfo struct {
@@ -27,6 +28,7 @@ type GeneralAgentInfo struct {
 	//quitIoProcessing         chan struct{}
 	//ioProcessingChannel      chan *cmds.ClientRequest
 	historyAppenderChannel chan *engines.Message
+	systemWriterChannel    chan *engines.Message
 	quitHistoryAppender    chan struct{}
 	historySize            int32
 
@@ -69,6 +71,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		quitChannelProcessing:  make(chan struct{}, 1),
 		//quitIoProcessing:         make(chan struct{}, 1),
 		quitHistoryAppender: make(chan struct{}, 1),
+		systemWriterChannel: make(chan *engines.Message, 100),
 
 		terminalsVisitsMap: make(map[string]int),
 		terminalsVotesMap:  make(map[string]float32),
@@ -141,6 +144,7 @@ func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error)
 		Content: contextString,
 		ID:      &messageId,
 	}
+	agentState.resultsProcessingChannel <- systemMessage
 	return systemMessage, nil
 }
 
