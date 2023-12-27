@@ -31,7 +31,7 @@ func (ie *InferenceEngine) Run() {
 	for {
 		attemptProcessing := false
 
-		timer := time.NewTimer(100 * time.Millisecond)
+		timer := time.NewTimer(1 * time.Millisecond)
 		if countMapValueLens(jobsBuffer, &jobsBufferLock) > 1024 {
 			select {
 			case <-timer.C:
@@ -86,7 +86,7 @@ func (ie *InferenceEngine) Run() {
 		// attempt to process the jobs
 		tsScheduling := time.Now()
 		for nodeIdx, _ := range ie.Nodes {
-		tryGetOneMoreJob:
+			//tryGetOneMoreJob:
 			if ie.Nodes[nodeIdx].RequestsRunning >= ie.Nodes[nodeIdx].MaxRequests {
 				continue
 			}
@@ -294,7 +294,7 @@ func (ie *InferenceEngine) Run() {
 			}
 
 			if ie.Nodes[nodeIdx].RequestsRunning < ie.Nodes[nodeIdx].MaxRequests {
-				goto tryGetOneMoreJob
+				//goto tryGetOneMoreJob
 			}
 		}
 
