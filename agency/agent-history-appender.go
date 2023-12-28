@@ -1,7 +1,6 @@
 package agency
 
 import (
-	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
@@ -20,7 +19,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 			alreadyExists := false
 			for _, storedMessage := range agentState.History {
 				if *storedMessage.ID == *messageId {
-					fmt.Printf("got message with ID %s already in history, merging replyTo maps\n", *messageId)
+					//fmt.Printf("got message with ID %s already in history, merging replyTo maps\n", *messageId)
 					if storedMessage.Content != message.Content {
 						storedMessage.Content = message.Content // fatal error!
 					}
@@ -31,7 +30,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 				}
 			}
 			if !alreadyExists {
-				fmt.Printf("Adding new message to history: %s\n", *messageId)
+				//fmt.Printf("Adding new message to history: %s\n", *messageId)
 				agentState.History = append(agentState.History, message)
 				atomic.AddInt32(&agentState.historySize, 1)
 			}
