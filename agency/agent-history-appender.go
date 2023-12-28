@@ -39,10 +39,10 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 			}
 		case message = <-agentState.systemWriterChannel:
 		}
-		runClientRequest(agentState, message)
+		writeMessagesTrace(agentState, message)
 	}
 }
-func runClientRequest(agentState *GeneralAgentInfo, message *engines.Message) {
+func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
 	_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
 		WriteMessagesTrace: []*engines.Message{message},
 	}, 120*time.Second, os_client.REP_IO)

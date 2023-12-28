@@ -25,14 +25,13 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				}()
 
 				if message.Role == engines.ChatRoleSystem {
-					systemMessage := &engines.Message{
+					agentState.systemWriterChannel <- &engines.Message{
 						ID: message.ID,
 						// ReplyTo: map[string]struct{}{correlationId: {}},
 						ReplyTo: map[string]struct{}{}, // Set to an empty map
 						Role:    engines.ChatRoleSystem,
 						Content: message.Content,
 					}
-					agentState.systemWriterChannel <- systemMessage
 					return
 				}
 				ioRequests := agentState.TranslateToServerCallsAndRecordHistory([]*engines.Message{message})
