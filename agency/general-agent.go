@@ -144,7 +144,7 @@ func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error)
 		Content: contextString,
 		ID:      &messageId,
 	}
-	agentState.historyAppenderChannel <- systemMessage
+	agentState.systemWriterChannel <- systemMessage
 	return systemMessage, nil
 }
 
