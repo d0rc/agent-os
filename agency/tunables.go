@@ -3,10 +3,10 @@ package agency
 import "time"
 
 const NumberOfVotesToCache = 3
-const VoterMinResults = 7
+const VoterMinResults = 3
 const MinimumNumberOfVotes = 3
-const MinimalVotingRatingForCommand = 3.0
-const ToTPathLenToTriggerTerminalCallback = 14
+const MinimalVotingRatingForCommand = 1.0
+const ToTPathLenToTriggerTerminalCallback = 18
 const ResubmitSystemPromptAfter = 15 * time.Minute
-const MaxIoRequestsThreads = 128
+const MaxIoRequestsThreads = 192
 const WriteVotesLog = true

@@ -135,9 +135,12 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 			})
 		case []interface{}:
 			for _, keyword := range keywords.([]interface{}) {
-				clientRequests[0].GoogleSearchRequests = append(clientRequests[0].GoogleSearchRequests, cmds.GoogleSearchRequest{
-					Keywords: keyword.(string),
-				})
+				keywordString, ok := keyword.(string)
+				if ok {
+					clientRequests[0].GoogleSearchRequests = append(clientRequests[0].GoogleSearchRequests, cmds.GoogleSearchRequest{
+						Keywords: keywordString,
+					})
+				}
 			}
 		}
 	case "write-note":

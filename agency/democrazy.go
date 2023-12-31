@@ -5,8 +5,10 @@ import (
 	"fmt"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -119,6 +121,7 @@ retryVoting:
 					strings.TrimSpace(parsedVoteString),
 					currentVoteRate,
 				))
+				exportVoterTrainingData(initialGoal, actionDescription, parsedVoteString, currentVoteRate)
 			}
 			currentRating += currentVoteRate
 			numberOfVotes++
@@ -162,4 +165,29 @@ retryVoting:
 	}
 
 	return finalRating, nil
+}
+
+func exportVoterTrainingData(goal string, description string, voteString string, rate float32) {
+	type voterTrainingDataRecord struct {
+		Goal   string  `json:"goal"`
+		Action string  `json:"action"`
+		Vote   string  `json:"vote"`
+		Rate   float32 `json:"rate"`
+	}
+
+	_ = os.MkdirAll("voter-training-data/", os.ModePerm)
+	data := voterTrainingDataRecord{
+		Goal:   goal,
+		Action: description,
+		Vote:   voteString,
+		Rate:   rate,
+	}
+
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		fmt.Printf("error marshalling voter training data: %s\n", err)
+		return
+	}
+
+	_ = os.WriteFile(fmt.Sprintf("voter-training-data/%s.json", engines.GenerateMessageId(goal+description+voteString)), jsonBytes, os.ModePerm)
 }
