@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,7 +59,7 @@ func (ie *InferenceEngine) buildTopString(jobsBuffer map[JobPriority][]*ComputeJ
 	for _, node := range ie.Nodes {
 		computeEnginesLine := []string{
 			shoLastNRunes(node.EndpointUrl, 35),
-			fmt.Sprintf("%v", getNodeState(termUi, node.RequestsRunning)),
+			fmt.Sprintf("%v", getNodeState(termUi, int(atomic.LoadInt32(&node.RequestsRunning)))),
 			fmt.Sprintf("%d/%d", node.MaxRequests, node.MaxBatchSize),
 			fmt.Sprintf("%d/%d", node.TotalRequestsProcessed, node.TotalJobsProcessed),
 			fmt.Sprintf("%s", node.TotalTimeConsumed),

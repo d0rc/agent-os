@@ -17,7 +17,7 @@ type InferenceNode struct {
 	TotalTimeConsumed      time.Duration
 	TotalTimeIdle          time.Duration
 
-	RequestsRunning     int
+	RequestsRunning     int32
 	LastIdleAt          time.Time
 	RemoteEngine        *engines.RemoteInferenceEngine
 	TotalTimeWaisted    time.Duration

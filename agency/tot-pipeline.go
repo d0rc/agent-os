@@ -11,11 +11,11 @@ import (
 func (agentState *GeneralAgentInfo) ToTPipeline() {
 	for {
 		if atomic.LoadUint64(&agentState.jobsFinished) < atomic.LoadUint64(&agentState.jobsReceived) {
-			time.Sleep(5000 * time.Millisecond)
+			time.Sleep(10 * time.Millisecond)
 		} else {
 			jobsSent, _ := agentState.totPipelineStep()
 			if jobsSent == 0 {
-				time.Sleep(5000 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			}
 		}
 	}
@@ -43,19 +43,6 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 		if agentState.visitTerminalMessage(messages) {
 			jobsSubmitted++
 		}
-
-		chatText := ""
-		for idxMessage, message := range messages {
-			chatText += fmt.Sprintf("======================================================\nMsg(%04d):%s, %s\n%s\n",
-				idxMessage,
-				*message.ID,
-				message.Role,
-				message.Content)
-		}
-		/*
-			_ = os.MkdirAll("full-chats", os.ModePerm)
-			_ = os.WriteFile("full-chats/"+getChatSignature(messages)+".txt",
-				[]byte(chatText), os.ModePerm)*/
 	})
 
 	if jobsSubmitted > 0 {
@@ -69,25 +56,6 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter &&
 		atomic.LoadUint64(&agentState.jobsFinished) == atomic.LoadUint64(&agentState.jobsReceived) {
 		agentState.Stop()
-		/*fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
-			aurora.BrightRed(agentState.Settings.Agent.Name),
-			time.Since(agentState.jobsSubmittedTs))
-
-		agentState.jobsSubmittedTs = time.Now()
-		agentState.jobsChannel <- &cmds.ClientRequest{
-			ProcessName: agentState.SystemName,
-			Priority:    borrow_engine.PRIO_User,
-			GetCompletionRequests: []cmds.GetCompletionRequest{
-				{
-					RawPrompt: chatToRawPrompt([]*engines.Message{
-						systemMessage,
-					}),
-					MinResults:  9,
-					Temperature: 0.9,
-				},
-			},
-			CorrelationId: *systemMessage.ID,
-		}*/
 	}
 
 	return jobsSubmitted, nil

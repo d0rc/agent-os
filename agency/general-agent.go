@@ -60,7 +60,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		InputVariables:           map[string]any{},
 		History:                  make([]*engines.Message, 0),
 		jobsChannel:              make(chan *cmds.ClientRequest, 1),
-		resultsChannel:           make(chan *cmds.ServerResponse, 100),
+		resultsChannel:           make(chan *cmds.ServerResponse, 1024),
 		resultsProcessingChannel: make(chan *engines.Message, 100),
 		//ioProcessingChannel:      make(chan *cmds.ClientRequest, 100),
 		historyAppenderChannel: make(chan *engines.Message, 100),
