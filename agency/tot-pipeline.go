@@ -2,8 +2,6 @@ package agency
 
 import (
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
-	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/logrusorgru/aurora"
 	"sync/atomic"
@@ -70,7 +68,8 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 
 	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter &&
 		atomic.LoadUint64(&agentState.jobsFinished) == atomic.LoadUint64(&agentState.jobsReceived) {
-		fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
+		agentState.Stop()
+		/*fmt.Printf("[%s] No jobs submitted in %v, submitting system message\n",
 			aurora.BrightRed(agentState.Settings.Agent.Name),
 			time.Since(agentState.jobsSubmittedTs))
 
@@ -88,7 +87,7 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 				},
 			},
 			CorrelationId: *systemMessage.ID,
-		}
+		}*/
 	}
 
 	return jobsSubmitted, nil
