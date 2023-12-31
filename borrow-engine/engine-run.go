@@ -83,7 +83,15 @@ func (ie *InferenceEngine) Run() {
 
 						if len(batch) > 0 {
 							// we have a batch of jobs to run...!
-							atomic.AddInt32(&ie.Nodes[nodeIdx].RequestsRunning, 1)
+							if atomic.AddInt32(&ie.Nodes[nodeIdx].RequestsRunning, 1) == 1 {
+								ie.Nodes[nodeIdx].TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)
+							}
+							jobsBufferLock.Lock()
+							for _, job := range batch {
+								ie.ProcessesTotalJobs[job.Process]++
+								ie.ProcessesTotalTimeWaiting[job.Process] += time.Since(job.receivedAt)
+							}
+							jobsBufferLock.Unlock()
 							node.RunBatch(ie.ComputeFunction, batch, nodeIdx, func(nodeIdx int, ts time.Time) {
 								ie.Nodes[nodeIdx].TotalTimeConsumed += time.Since(ts)
 								ie.TotalRequestsProcessed++
@@ -97,10 +105,6 @@ func (ie *InferenceEngine) Run() {
 								//ie.Nodes[nodeIdx].RequestsRunning--
 								ie.Nodes[nodeIdx].TotalRequestsProcessed++
 								ie.Nodes[nodeIdx].TotalJobsProcessed += uint64(len(batch))
-
-								if ie.Nodes[nodeIdx].RequestsRunning == 0 {
-									ie.Nodes[nodeIdx].LastIdleAt = time.Now()
-								}
 							}, func(nodeIdx int, ts time.Time, err error) {
 								// fmt.Printf("Batch of %d jobs on node %s failed\n", len(batch[canSendJobType]), ie.Nodes[nodeIdx].EndpointUrl)
 								ie.Nodes[nodeIdx].TotalTimeWaisted += time.Since(ts)
@@ -114,16 +118,15 @@ func (ie *InferenceEngine) Run() {
 								go func() {
 									ie.IncomingJobs <- batch
 								}()
-
-								//ie.Nodes[nodeIdx].RequestsRunning--
-								if ie.Nodes[nodeIdx].RequestsRunning == 0 {
-									ie.Nodes[nodeIdx].LastIdleAt = time.Now()
-								}
 							})
 							batch = []*ComputeJob{}
 							batchIsReady = false
 
 							atomic.AddInt32(&ie.Nodes[nodeIdx].RequestsRunning, -1)
+
+							if atomic.LoadInt32(&ie.Nodes[nodeIdx].RequestsRunning) == 0 {
+								ie.Nodes[nodeIdx].LastIdleAt = time.Now()
+							}
 						} else {
 							time.Sleep(10 * time.Millisecond)
 						}
