@@ -88,9 +88,6 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 
 	if request.GoogleSearchRequests != nil && len(request.GoogleSearchRequests) > 0 {
 		ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
-		if request.ProcessName == "" {
-			fmt.Printf("wow")
-		}
 		result, err = cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
 	}
 
