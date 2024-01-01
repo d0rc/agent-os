@@ -1,12 +1,11 @@
 package agency
 
 import (
-	"fmt"
-	"sync/atomic"
-	"time"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
+	"sync/atomic"
+	"time"
 )
 
 func (agentState *GeneralAgentInfo) historyAppender() {
