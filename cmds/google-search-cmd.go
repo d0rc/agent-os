@@ -61,7 +61,7 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 				Msgf("falling back to new search - error parsing cache data for keywords: %s", gsr.Keywords)
 		} else {
 			// mark cache hit...!
-			ctx.Log.Trace().Msgf("google-search-hit[%d]: %s", selectedCacheResult.Id, gsr.Keywords)
+			ctx.Log.Trace().Msgf("google-search-hit [%d](fg:cyan,mod:bold): [%s](fg:green,mod:bold)", selectedCacheResult.Id, gsr.Keywords)
 			_, err = ctx.Storage.Db.Exec("make-search-cache-hit", selectedCacheResult.Id)
 			if err != nil {
 				ctx.Log.Error().Err(err).

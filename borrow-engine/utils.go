@@ -12,16 +12,3 @@ func countMapValueLens(buffer map[JobPriority][]*ComputeJob, lock *sync.RWMutex)
 
 	return cnt
 }
-
-func getJobsByType(buffer []*ComputeJob, types []JobType) map[JobType][]*ComputeJob {
-	jobsByType := make(map[JobType][]*ComputeJob)
-	for _, jobType := range types {
-		jobsByType[jobType] = []*ComputeJob{}
-	}
-
-	for _, job := range buffer {
-		jobsByType[job.JobType] = append(jobsByType[job.JobType], job)
-	}
-
-	return jobsByType
-}
