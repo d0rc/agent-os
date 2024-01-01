@@ -3,11 +3,12 @@ package agency
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/rs/zerolog/log"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
@@ -22,6 +23,17 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 				defer func() {
 					<-maxIoRequestsChan
 				}()
+
+				if message.Role == engines.ChatRoleSystem {
+					agentState.systemWriterChannel <- &engines.Message{
+						ID: message.ID,
+						// ReplyTo: map[string]struct{}{correlationId: {}},
+						ReplyTo: map[string]struct{}{}, // Set to an empty map
+						Role:    engines.ChatRoleSystem,
+						Content: message.Content,
+					}
+					return
+				}
 				ioRequests := agentState.TranslateToServerCallsAndRecordHistory([]*engines.Message{message})
 				// run all at once
 				if len(ioRequests) == 0 {

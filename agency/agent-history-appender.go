@@ -1,19 +1,21 @@
 package agency
 
 import (
+	"fmt"
+	"sync/atomic"
+	"time"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
-	"sync/atomic"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) historyAppender() {
+	var message *engines.Message
 	for {
 		select {
 		case <-agentState.quitHistoryAppender:
 			return
-		case message := <-agentState.historyAppenderChannel:
+		case message = <-agentState.historyAppenderChannel:
 			// let's see if message already in the History
 			messageId := message.ID
 			alreadyExists := false
@@ -34,10 +36,13 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 				agentState.History = append(agentState.History, message)
 				atomic.AddInt32(&agentState.historySize, 1)
 			}
-
-			_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
-				WriteMessagesTrace: []*engines.Message{message},
-			}, 120*time.Second, os_client.REP_IO)
+		case message = <-agentState.systemWriterChannel:
 		}
+		writeMessagesTrace(agentState, message)
 	}
+}
+func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
+	_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+		WriteMessagesTrace: []*engines.Message{message},
+	}, 120*time.Second, os_client.REP_IO)
 }
