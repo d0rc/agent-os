@@ -92,7 +92,7 @@ func generateObservationFromServerResults(request *cmds.ClientRequest, response 
 
 	if len(response.GetPageResponse) > 0 {
 		for _, pageResponse := range response.GetPageResponse {
-			if pageResponse.Markdown != "" {
+			if pageResponse != nil && pageResponse.Markdown != "" {
 				observation += fmt.Sprintf("Page content for \"%s\":\n", pageResponse.Url)
 				observation += fmt.Sprintf("```\n%s\n```\n", pageResponse.Markdown)
 				if len(observation) < maxLength {
