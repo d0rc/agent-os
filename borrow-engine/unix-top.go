@@ -74,31 +74,38 @@ func (ie *InferenceEngine) buildTopString(jobsBuffer map[JobPriority][]*ComputeJ
 
 	tw = tablewriter.NewWriter(stringBuilder)
 	processesHeadersLines := make([][]string, 0)
-	processesHeaders := []string{"Process", "TotalJobsProcessed", "TotalTimeConsumed", "AvgWait"}
+	processesHeaders := []string{"Process", "TotalRequestsProcessed", "TotalJobsProcessed", "TotalTimeConsumed", "AvgWait"}
 	tw.SetHeader(processesHeaders)
 	processesHeadersLines = append(processesHeadersLines, processesHeaders)
 	lock.RLock()
 
 	type ProcessInfo struct {
-		TotalJobs uint64
-		Name      string
+		TotalRequests uint64
+		TotalJobs     uint64
+		Name          string
 	}
-	processInfo := make([]ProcessInfo, 0, len(ie.ProcessesTotalJobs))
-	for process, tj := range ie.ProcessesTotalJobs {
+	processInfo := make([]ProcessInfo, 0, len(ie.ProcessesTotalRequests))
+	for process, tr := range ie.ProcessesTotalRequests {
+		tj, exists := ie.ProcessesTotalJobs[process]
+		if !exists {
+			tj = 0
+		}
 		processInfo = append(processInfo, ProcessInfo{
-			TotalJobs: tj,
-			Name:      process,
+			TotalRequests: tr,
+			TotalJobs:     tj,
+			Name:          process,
 		})
 	}
 	// sort processInfo, make process with most jobs first
 	// use library sort
 	sort.Slice(processInfo, func(i, j int) bool {
-		return processInfo[i].TotalJobs > processInfo[j].TotalJobs
+		return processInfo[i].TotalRequests > processInfo[j].TotalRequests
 	})
 
 	for idx, processData := range processInfo {
 		processesHeadersLine := []string{
 			processData.Name,
+			fmt.Sprintf("%d", processData.TotalRequests),
 			fmt.Sprintf("%d", ie.ProcessesTotalJobs[processData.Name]),
 			fmt.Sprintf("%s", ie.ProcessesTotalTimeConsumed[processData.Name]),
 			fmt.Sprintf("%s", fmt.Sprintf("%4.4f", float64(ie.ProcessesTotalTimeWaiting[processData.Name]/time.Millisecond)/float64(ie.ProcessesTotalJobs[processData.Name]))),

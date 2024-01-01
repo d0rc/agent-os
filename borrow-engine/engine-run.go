@@ -2,7 +2,6 @@ package borrow_engine
 
 import (
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -14,15 +13,14 @@ func (ie *InferenceEngine) Run() {
 		PRIO_User:       []*ComputeJob{},
 		PRIO_Background: []*ComputeJob{},
 	}
-	jobsBufferLock := sync.RWMutex{}
 
 	go func() {
 		if ie.settings.TermUI {
-			ie.ui(jobsBuffer, &jobsBufferLock)
+			ie.ui(jobsBuffer, &ie.statsLock)
 			os.Exit(0)
 		} else {
 			for {
-				ie.PrintTop(jobsBuffer, &jobsBufferLock)
+				ie.PrintTop(jobsBuffer, &ie.statsLock)
 				time.Sleep(ie.settings.TopInterval)
 			}
 		}
@@ -86,22 +84,22 @@ func (ie *InferenceEngine) Run() {
 							if atomic.AddInt32(&ie.Nodes[nodeIdx].RequestsRunning, 1) == 1 {
 								ie.Nodes[nodeIdx].TotalTimeIdle += time.Since(ie.Nodes[nodeIdx].LastIdleAt)
 							}
-							jobsBufferLock.Lock()
+							ie.statsLock.Lock()
 							for _, job := range batch {
 								ie.ProcessesTotalJobs[job.Process]++
 								ie.ProcessesTotalTimeWaiting[job.Process] += time.Since(job.receivedAt)
 							}
-							jobsBufferLock.Unlock()
+							ie.statsLock.Unlock()
 							node.RunBatch(ie.ComputeFunction, batch, nodeIdx, func(nodeIdx int, ts time.Time) {
 								ie.Nodes[nodeIdx].TotalTimeConsumed += time.Since(ts)
 								ie.TotalRequestsProcessed++
 								ie.TotalJobsProcessed += uint64(len(batch))
 								ie.TotalTimeConsumed += time.Since(ts)
-								jobsBufferLock.Lock()
+								ie.statsLock.Lock()
 								for _, job := range batch {
 									ie.ProcessesTotalTimeConsumed[job.Process] += time.Since(ts)
 								}
-								jobsBufferLock.Unlock()
+								ie.statsLock.Unlock()
 								//ie.Nodes[nodeIdx].RequestsRunning--
 								ie.Nodes[nodeIdx].TotalRequestsProcessed++
 								ie.Nodes[nodeIdx].TotalJobsProcessed += uint64(len(batch))

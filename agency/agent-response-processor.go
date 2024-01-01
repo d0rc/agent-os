@@ -123,6 +123,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	clientRequests = append(clientRequests, &cmds.ClientRequest{
 		GoogleSearchRequests: make([]cmds.GoogleSearchRequest, 0),
+		ProcessName:          agentState.SystemName,
 		CorrelationId:        resultId,
 	})
 	switch commandName {

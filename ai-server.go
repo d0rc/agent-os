@@ -79,28 +79,38 @@ func main() {
 func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.ServerResponse, error) {
 	var result *cmds.ServerResponse = &cmds.ServerResponse{}
 	var err error
+
 	if request.GetPageRequests != nil && len(request.GetPageRequests) > 0 {
 		// got some page requests...!
+		ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
 		result, err = cmds.ProcessPageRequests(request.GetPageRequests, ctx)
 	}
 
 	if request.GoogleSearchRequests != nil && len(request.GoogleSearchRequests) > 0 {
+		ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
+		if request.ProcessName == "" {
+			fmt.Printf("wow")
+		}
 		result, err = cmds.ProcessGoogleSearches(request.GoogleSearchRequests, ctx)
 	}
 
 	if request.GetCompletionRequests != nil && len(request.GetCompletionRequests) > 0 {
+		ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
 		result, err = cmds.ProcessGetCompletions(request.GetCompletionRequests, ctx, request.ProcessName, request.Priority)
 	}
 
 	if request.GetEmbeddingsRequests != nil && len(request.GetEmbeddingsRequests) > 0 {
+		ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
 		result, err = cmds.ProcessGetEmbeddings(request.GetEmbeddingsRequests, ctx, request.ProcessName, request.Priority)
 	}
 
 	if request.GetCacheRecords != nil && len(request.GetCacheRecords) > 0 {
+		// ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
 		result, err = cmds.ProcessGetCacheRecords(request.GetCacheRecords, ctx, request.ProcessName)
 	}
 
 	if request.SetCacheRecords != nil && len(request.SetCacheRecords) > 0 {
+		// ctx.ComputeRouter.AccountProcessRequest(request.ProcessName)
 		result, err = cmds.ProcessSetCacheRecords(request.SetCacheRecords, ctx, request.ProcessName)
 	}
 

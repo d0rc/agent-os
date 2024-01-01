@@ -3,6 +3,7 @@ package borrow_engine
 import (
 	"github.com/d0rc/agent-os/engines"
 	zlog "github.com/rs/zerolog/log"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,13 @@ type InferenceEngine struct {
 	TotalTimeWaisted    time.Duration
 	TotalRequestsFailed uint64
 	settings            *InferenceEngineSettings
+	statsLock           sync.RWMutex
+}
+
+func (ie *InferenceEngine) AccountProcessRequest(process string) {
+	ie.statsLock.Lock()
+	defer ie.statsLock.Unlock()
+	ie.ProcessesTotalRequests[process]++
 }
 
 type InferenceEngineSettings struct {
@@ -43,11 +51,13 @@ func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *I
 		AddNodeChan:                make(chan *InferenceNode, 16384),
 		IncomingJobs:               make(chan []*ComputeJob, 16384),
 		InferenceDone:              make(chan *InferenceNode, 16384),
+		ProcessesTotalRequests:     map[string]uint64{},
 		ProcessesTotalJobs:         make(map[string]uint64),
 		ProcessesTotalTimeWaiting:  make(map[string]time.Duration),
 		ProcessesTotalTimeConsumed: make(map[string]time.Duration),
 		ComputeFunction:            f,
 		settings:                   settings,
+		statsLock:                  sync.RWMutex{},
 	}
 }
 
