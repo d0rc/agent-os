@@ -17,10 +17,17 @@ type AgentOSClient struct {
 }
 
 func NewAgentOSClient(url string) *AgentOSClient {
+	tr := &http.Transport{
+		MaxIdleConns:          10,
+		IdleConnTimeout:       15 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		DisableKeepAlives:     false,
+	}
 	return &AgentOSClient{
 		Url: url,
 		client: http.Client{
-			Timeout: 600 * time.Second,
+			Timeout:   600 * time.Second,
+			Transport: tr,
 		},
 	}
 }
