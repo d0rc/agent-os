@@ -19,6 +19,9 @@ var agentName = flag.String("name", "agent-research-agent", "Agent name")
 var dbHost = flag.String("db-host", "127.0.0.1", "database host")
 var dbChunkSize = flag.Int("db-chunk-size", 1024, "database chunk size")
 var dbParallelThreads = flag.Int("db-threads", 32, "database threads")
+var outputMessagesParquet = flag.String("messages-parquet", "/tmp/messages.parquet", "output messages parquet file")
+var outputEdgesParquet = flag.String("edges-parquet", "/tmp/edges.parquet", "output edges parquet file")
+var outputDotFile = flag.String("dot-file", "/tmp/graph.dot", "output dot file")
 
 var db *storage.Storage
 
@@ -40,9 +43,9 @@ func main() {
 	lg.Info().Msgf("got %d messages in %v", len(messages), time.Since(ts))
 
 	ts = time.Now()
-	storeNodesToParquetFile("/tmp/messages.parquet", messages)
-	storeEdgesToParquetFile("/tmp/edges.parquet", edges)
-	writeDotFile("/tmp/graph.dot", messages, edges, lg)
+	storeNodesToParquetFile(*outputMessagesParquet, messages)
+	storeEdgesToParquetFile(*outputEdgesParquet, edges)
+	writeDotFile(*outputDotFile, messages, edges, lg)
 	lg.Info().Msgf("done exporting files in %v", time.Since(ts))
 }
 
