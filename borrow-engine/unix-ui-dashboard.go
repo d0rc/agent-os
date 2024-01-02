@@ -2,6 +2,8 @@ package borrow_engine
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/d0rc/agent-os/metrics"
 	ui "github.com/gizak/termui/v3"
 	"log"
 	"sync"
@@ -47,7 +49,9 @@ func (ie *InferenceEngine) ui(jobsBuffer map[JobPriority][]*ComputeJob, lock *sy
 		}
 
 		processesTable := widgets.NewTable()
-		processesTable.Title = "[ Processes ]"
+		processesTable.Title = fmt.Sprintf("[ Processes: %d | RPS: %04.2f ]",
+			len(ie.ProcessesTotalRequests),
+			metrics.GetRate1s("http.requests")*float64(time.Second))
 		processesTable.RowSeparator = false
 		processesTable.Rows = topInfo.processesLines
 		processesTable.FillRow = true

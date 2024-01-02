@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/metrics"
 	process_embeddings "github.com/d0rc/agent-os/process-embeddings"
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/utils"
@@ -38,15 +39,15 @@ func main() {
 
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		metrics.Tick("http.requests", 1)
 		// read the request
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			lg.Error().Err(err).Msg("failed to read request")
 			return
 		}
-		defer r.Body.Close()
+		_ = r.Body.Close()
 
-		// decode body JSON as ClientRequest
 		clientRequest := &cmds.ClientRequest{}
 		err = json.Unmarshal(body, clientRequest)
 		if err != nil {
