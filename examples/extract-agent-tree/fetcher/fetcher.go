@@ -3,6 +3,8 @@ package fetcher
 import (
 	"github.com/d0rc/agent-os/storage"
 	"github.com/rs/zerolog"
+	"sync/atomic"
+	"time"
 )
 
 type Fetcher struct {
@@ -17,7 +19,7 @@ func NewFetcher(db *storage.Storage, lg zerolog.Logger) *Fetcher {
 	}
 }
 
-func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[string]string, error) {
+func (f *Fetcher) FetchMessages(agentName string, dbChunkSize, dbThreads int) (map[string]*DotNode, map[string]string, error) {
 	f.lg.Info().Msgf("loading root messages for agent %s", agentName)
 
 	messages := make(map[string]*DotNode)
@@ -33,22 +35,24 @@ func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[stri
 		// fetching information about all messages we need
 		f.lg.Info().Msgf("fetching %d messages", len(ids2fetch))
 
-		ids2fetchChunks := splitIntoChunks(ids2fetch, 1024)
-		tmpMessages := make([]DbMessage, 0)
-		for chunkIdx, chunk := range ids2fetchChunks {
-			f.lg.Info().Msgf("[%d/%d] fetching chunk of %d messages",
-				chunkIdx+1,
-				len(ids2fetchChunks),
-				len(ids2fetch))
+		ids2fetchChunks := splitIntoChunks(ids2fetch, dbChunkSize)
+		messageCounter := int32(0)
+		tmpMessages := pMap(func(chunk []string, chunkIdx int) []DbMessage {
+			ts := time.Now()
 			chunkMessages := make([]DbMessage, 0)
 			err = f.db.Db.GetStructsSlice("get-messages-by-ids", &chunkMessages, chunk)
 			if err != nil {
-				f.lg.Error().Err(err).Msg("error getting messages")
-				return nil, nil, err
+				f.lg.Fatal().Err(err).Msg("error getting messages")
 			}
 
-			tmpMessages = append(tmpMessages, chunkMessages...)
-		}
+			f.lg.Info().Msgf("Done fetching chunk#%d [%d of %d] (total links: %d) in %v",
+				chunkIdx+1,
+				atomic.AddInt32(&messageCounter, 1),
+				len(ids2fetchChunks),
+				len(ids2fetch),
+				time.Since(ts))
+			return chunkMessages
+		}, ids2fetchChunks, dbThreads)
 
 		// once we have all the messages, let's add them to the graph
 		newMessages := make(map[string]struct{})
@@ -67,23 +71,27 @@ func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[stri
 
 		// for all new messages, fetch their replies
 		f.lg.Info().Msgf("fetching links for %d", len(newMessages))
+		// parallel implementation
 		newMessageIds := getMapKeys(newMessages)
-		newMessageIdsChunks := splitIntoChunks(newMessageIds, 1024)
-		links := make([]DbMessageLink, 0)
-		for chunkIdx, chunk := range newMessageIdsChunks {
-			f.lg.Info().Msgf("[%d/%d] fetching chunk of %d links",
-				chunkIdx+1,
-				len(newMessageIdsChunks),
-				len(newMessageIds))
+		newMessageIdsChunks := splitIntoChunks(newMessageIds, dbChunkSize)
+		linksCounter := int32(0)
+		links := pMap(func(chunk []string, chunkIdx int) []DbMessageLink {
+			ts := time.Now()
 			chunkLinks := make([]DbMessageLink, 0)
 			err = f.db.Db.GetStructsSlice("get-messages-links-by-reply-to", &chunkLinks, chunk)
 			if err != nil {
-				f.lg.Error().Err(err).Msg("error getting messages")
-				return nil, nil, err
+				f.lg.Fatal().Err(err).Msg("error getting messages")
 			}
 
-			links = append(links, chunkLinks...)
-		}
+			f.lg.Info().Msgf("Done fetching chunk#%d [%d of %d] (total links: %d) in %v",
+				chunkIdx+1,
+				atomic.AddInt32(&linksCounter, 1),
+				len(newMessageIdsChunks),
+				len(newMessageIds),
+				time.Since(ts))
+
+			return chunkLinks
+		}, newMessageIdsChunks, dbThreads)
 
 		newIds := make(map[string]struct{})
 		for _, link := range links {

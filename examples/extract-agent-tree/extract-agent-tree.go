@@ -17,6 +17,8 @@ import (
 
 var agentName = flag.String("name", "agent-research-agent", "Agent name")
 var dbHost = flag.String("db-host", "127.0.0.1", "database host")
+var dbChunkSize = flag.Int("db-chunk-size", 1024, "database chunk size")
+var dbParallelThreads = flag.Int("db-threads", 32, "database threads")
 
 var db *storage.Storage
 
@@ -33,7 +35,7 @@ func main() {
 
 	ts := time.Now()
 	ctx := fetcher.NewFetcher(db, lg)
-	messages, edges, err := ctx.FetchMessages(*agentName)
+	messages, edges, err := ctx.FetchMessages(*agentName, *dbChunkSize, *dbParallelThreads)
 
 	lg.Info().Msgf("got %d messages in %v", len(messages), time.Since(ts))
 
