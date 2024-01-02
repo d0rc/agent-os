@@ -1,6 +1,7 @@
 package cmds
 
 import (
+	"github.com/d0rc/agent-os/batcher"
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
@@ -62,14 +63,20 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context, process 
 		Choices: make([]string, 0, len(cachedResponse)),
 	}
 
+	llmHitsBatcher := batcher.NewBatcher("llm-hits-batcher", func(ids []int64) error {
+		_, err := ctx.Storage.Db.Exec("make-llm-cache-hits", ids)
+		return err
+	}, 32, 50*time.Millisecond)
+
 	if len(cachedResponse) > 0 {
 		// we have some cache hits, let's check if it's enough...!
 		for _, cacheRecord := range cachedResponse {
 			response.Choices = append(response.Choices, cacheRecord.GenerationResult)
-			_, err := ctx.Storage.Db.Exec("make-llm-cache-hit", cacheRecord.Id)
+			/*_, err := ctx.Storage.Db.Exec("make-llm-cache-hit", cacheRecord.Id)
 			if err != nil {
 				ctx.Log.Error().Err(err).Msgf("error updating cache-hit counter: %v", err)
-			}
+			}*/
+			llmHitsBatcher.RunTask(cacheRecord.Id)
 		}
 
 		if len(response.Choices) >= cr.MinResults {

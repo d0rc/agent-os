@@ -48,6 +48,9 @@ values (?,?,?,?,?,?,?);
 -- name: make-search-cache-hit
 update search_cache set cache_hits = cache_hits + 1 where id = ?;
 
+-- name: make-search-cache-hits
+update search_cache set cache_hits = cache_hits + 1 where id in (?);
+
 -- name: ddl-create-llm-embeddings
 CREATE TABLE  if not exists  `llm_embeddings` (
     `id` bigint unsigned NOT NULL AUTO_INCREMENT,
@@ -137,6 +140,9 @@ from llm_cache where
 
 -- name: make-llm-cache-hit
 update llm_cache set cache_hits = cache_hits + 1 where id = ?;
+
+-- name: make-llm-cache-hits
+update llm_cache set cache_hits = cache_hits + 1 where id in (?);
 
 -- name: ddl-task-cache
 create table if not exists compute_cache (

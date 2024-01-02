@@ -3,6 +3,7 @@ package cmds
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/d0rc/agent-os/batcher"
 	"github.com/d0rc/agent-os/server"
 	g "github.com/serpapi/google-search-results-golang"
 	"sync"
@@ -61,12 +62,14 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 				Msgf("falling back to new search - error parsing cache data for keywords: %s", gsr.Keywords)
 		} else {
 			// mark cache hit...!
+			searchesBatcher := batcher.NewBatcher("search-cache-hits-batcher", func(ids []int64) error {
+				_, err := ctx.Storage.Db.Exec("make-search-cache-hits", ids)
+				return err
+			}, 32, 50*time.Millisecond)
+
 			ctx.Log.Trace().Msgf("google-search-hit [%d](fg:cyan,mod:bold): [%s](fg:green,mod:bold)", selectedCacheResult.Id, gsr.Keywords)
-			_, err = ctx.Storage.Db.Exec("make-search-cache-hit", selectedCacheResult.Id)
-			if err != nil {
-				ctx.Log.Error().Err(err).
-					Msgf("error marking cache hit for keywords: %s", gsr.Keywords)
-			}
+			searchesBatcher.RunTask(selectedCacheResult.Id)
+
 			// fill the result here....!
 			return &GoogleSearchResponse{
 				URLSearchInfos: result.OrganicUrs,
