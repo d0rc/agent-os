@@ -205,6 +205,9 @@ select id, reply_to from message_links where id = ?;
 -- name: get-message-links-by-reply-to
 select id, reply_to from message_links where reply_to =?;
 
+-- name: get-messages-links-by-reply-to
+select id, reply_to from message_links where reply_to  in (?);
+
 -- name: get-agent-roots
 select id from messages where messages.name = ? and role="system";
 
