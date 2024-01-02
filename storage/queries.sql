@@ -164,40 +164,49 @@ insert into compute_cache (namespace, task_hash, task_result) values (?,?,?);
 
 -- name: ddl-create-messages
 CREATE TABLE if not exists `messages` (
-                            `id` varchar(255) NOT NULL,
-                            `role` varchar(255) DEFAULT NULL,
-                            `content` mediumtext,
-                            PRIMARY KEY (`id`),
-                            KEY `role` (`role`),
-                            FULLTEXT KEY `content` (`content`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `id` varchar(255) NOT NULL,
+    `role` varchar(255) DEFAULT NULL,
+    `content` mediumtext,
+    `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `name` varchar(255) DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `role` (`role`),
+    KEY `name` (`name`),
+    FULLTEXT KEY `content` (`content`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci ROW_FORMAT=COMPRESSED ;
 
 -- name: ddl-create-message-links
 CREATE TABLE if not exists `message_links` (
-                                 `id` varchar(255) NOT NULL,
-                                 `reply_to` varchar(255) NOT NULL,
-                                 KEY `id` (`id`),
-                                 KEY `reply_to` (`reply_to`),
-                                 unique (id, reply_to)
+     `id` varchar(255) NOT NULL,
+     `reply_to` varchar(255) NOT NULL,
+     KEY `id` (`id`),
+     KEY `reply_to` (`reply_to`),
+     unique (id, reply_to)
 ) ENGINE=InnoDB;
 
 -- name: save-messages-trace
-insert into messages (id, role, content) values (?, ?, ?) on duplicate key update role=values(role);
+insert into messages (id, name, role, content) values (?, ?, ?, ?) on duplicate key update role=values(role), name=values(name);
 
 -- name: save-message-link
 insert into message_links (id, reply_to) values (?,?) on duplicate key update id=values(id);
 
 -- name: get-message-by-id
-select id, role, content from messages where id =?;
+select id, name, role, content from messages where id =?;
+
+-- name: get-messages-by-ids
+select id, name, role, content from messages where id in (?);
 
 -- name: get-messages-by-text
-select id, role, content from messages where content like ?;
+select id, name, role, content from messages where content like ?;
 
 -- name: get-message-links-by-id
 select id, reply_to from message_links where id = ?;
 
 -- name: get-message-links-by-reply-to
 select id, reply_to from message_links where reply_to =?;
+
+-- name: get-agent-roots
+select id from messages where messages.name = ? and role="system";
 
 -- name: get-paired-embeddings
 select

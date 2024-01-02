@@ -141,9 +141,9 @@ func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.A
 				idx+1,
 				len(snippets),
 				aurora.BrightYellow("question"),
-				aurora.White(cutStringAt(question, 30)))
-			fmt.Printf("[reduce] Current snippet: %s\n", aurora.White(cutStringAt(strings.TrimSpace(strings.ReplaceAll(snippet, "\n", " ")), 95)))
-			fmt.Printf("[reduce] Current summary: %s\n", aurora.White(cutStringAt(currentSummary, 95)))
+				aurora.White(CutStringAt(question, 30)))
+			fmt.Printf("[reduce] Current snippet: %s\n", aurora.White(CutStringAt(strings.TrimSpace(strings.ReplaceAll(snippet, "\n", " ")), 95)))
+			fmt.Printf("[reduce] Current summary: %s\n", aurora.White(CutStringAt(currentSummary, 95)))
 		}
 	}
 
@@ -239,7 +239,7 @@ func tokenizeDocument(document string, ctx *os_client.AgentOSClient) ([]string, 
 	return snippets, nil
 }
 
-func cutStringAt(content string, maxLen int) string {
+func CutStringAt(content string, maxLen int) string {
 	if len(content) < maxLen {
 		return content
 	}

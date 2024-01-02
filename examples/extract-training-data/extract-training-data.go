@@ -96,6 +96,7 @@ func getTheWayUp(db *storage.Storage, id string, path []string) {
 
 type DbMessage struct {
 	ID      string `db:"id"`
+	Name    string `db:"name"`
 	Role    string `db:"role"`
 	Content string `db:"content"`
 }

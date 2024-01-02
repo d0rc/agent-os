@@ -27,7 +27,7 @@ func NewStorage(lg zerolog.Logger, host string) (*Storage, error) {
 		WithDB("ai_srv").
 		WithHost(host).
 		WithParseTime().
-		WithMaxConns(4).
+		WithMaxConns(32).
 		WithMaxIdleConnTime(120 * time.Second).
 		WithMaxConnTime(600 * time.Second).
 		WithTCPTimeout(60 * time.Second).

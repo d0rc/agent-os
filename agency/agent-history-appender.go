@@ -42,6 +42,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 }
 func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
 	_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+		ProcessName:        agentState.SystemName,
 		WriteMessagesTrace: []*engines.Message{message},
 	}, 120*time.Second, os_client.REP_IO)
 }
