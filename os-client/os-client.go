@@ -12,11 +12,17 @@ import (
 )
 
 type AgentOSClient struct {
-	Url string
+	Url    string
+	client http.Client
 }
 
 func NewAgentOSClient(url string) *AgentOSClient {
-	return &AgentOSClient{Url: url}
+	return &AgentOSClient{
+		Url: url,
+		client: http.Client{
+			Timeout: 600 * time.Second,
+		},
+	}
 }
 
 func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Duration) ([]*cmds.ServerResponse, error) {
@@ -74,14 +80,13 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 		}()
 	}
 retry:
-	client := http.Client{Timeout: timeout}
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling request: %w", err)
 	}
 
-	resp, err := client.Post(c.Url, "application/json", bytes.NewBuffer(reqBytes))
+	resp, err := c.client.Post(c.Url, "application/json", bytes.NewBuffer(reqBytes))
 	if err != nil {
 		fmt.Printf("%s running OS request, going to try: %v\n",
 			aurora.BrightRed("error"),

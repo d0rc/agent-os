@@ -66,7 +66,7 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context, process 
 	llmHitsBatcher := batcher.NewBatcher("llm-hits-batcher", func(ids []int64) error {
 		_, err := ctx.Storage.Db.Exec("make-llm-cache-hits", ids)
 		return err
-	}, 32, 50*time.Millisecond)
+	}, 256, 500*time.Millisecond)
 
 	if len(cachedResponse) > 0 {
 		// we have some cache hits, let's check if it's enough...!
