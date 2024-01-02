@@ -6,11 +6,13 @@ import (
 	"github.com/d0rc/agent-os/examples/extract-agent-tree/fetcher"
 	"github.com/d0rc/agent-os/storage"
 	"github.com/d0rc/agent-os/utils"
+	"github.com/rs/zerolog"
 	"github.com/xitongsys/parquet-go/parquet"
 	"github.com/xitongsys/parquet-go/writer"
 	"log"
 	"os"
 	"strings"
+	"time"
 )
 
 var agentName = flag.String("name", "agent-research-agent", "Agent name")
@@ -29,15 +31,20 @@ func main() {
 		lg.Fatal().Err(err).Msg("error initializing storage")
 	}
 
+	ts := time.Now()
 	ctx := fetcher.NewFetcher(db, lg)
 	messages, edges, err := ctx.FetchMessages(*agentName)
 
-	lg.Info().Msgf("got %d messages", len(messages))
+	lg.Info().Msgf("got %d messages in %v", len(messages), time.Since(ts))
 
+	ts = time.Now()
 	storeNodesToParquetFile("/tmp/messages.parquet", messages)
 	storeEdgesToParquetFile("/tmp/edges.parquet", edges)
+	writeDotFile("/tmp/graph.dot", messages, edges, lg)
+	lg.Info().Msgf("done exporting files in %v", time.Since(ts))
+}
 
-	// let's write it all into .dot file...
+func writeDotFile(fName string, messages map[string]*fetcher.DotNode, edges map[string]string, lg zerolog.Logger) {
 	dotFile := `digraph ToTGraph {
 %s
 %s
@@ -59,7 +66,7 @@ func main() {
 
 	dotFile = fmt.Sprintf(dotFile, nodesString, edgesString)
 
-	err = os.WriteFile("/tmp/graph.dot", []byte(dotFile), 0644)
+	err := os.WriteFile(fName, []byte(dotFile), 0644)
 	if err != nil {
 		lg.Fatal().Err(err).Msg("error writing graph.dot")
 	}

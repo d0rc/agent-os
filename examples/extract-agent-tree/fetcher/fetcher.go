@@ -65,9 +65,9 @@ func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[stri
 			}
 		}
 
+		// for all new messages, fetch their replies
 		f.lg.Info().Msgf("fetching links for %d", len(newMessages))
 		newMessageIds := getMapKeys(newMessages)
-		// for all new messages, fetch their replies
 		newMessageIdsChunks := splitIntoChunks(newMessageIds, 1024)
 		links := make([]DbMessageLink, 0)
 		for chunkIdx, chunk := range newMessageIdsChunks {
@@ -95,6 +95,7 @@ func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[stri
 
 		ids2fetch = getMapKeys(newIds)
 		if len(ids2fetch) == 0 {
+			// we have no more messages to fetch
 			break
 		}
 	}
