@@ -41,13 +41,13 @@ func (f *Fetcher) FetchMessages(agentName string) (map[string]*DotNode, map[stri
 				len(ids2fetchChunks),
 				len(ids2fetch))
 			chunkMessages := make([]DbMessage, 0)
-			err = f.db.Db.GetStructsSlice("get-messages-by-ids", &tmpMessages, chunk)
+			err = f.db.Db.GetStructsSlice("get-messages-by-ids", &chunkMessages, chunk)
 			if err != nil {
 				f.lg.Error().Err(err).Msg("error getting messages")
 				return nil, nil, err
 			}
 
-			chunkMessages = append(chunkMessages, tmpMessages...)
+			tmpMessages = append(tmpMessages, chunkMessages...)
 		}
 
 		// once we have all the messages, let's add them to the graph
