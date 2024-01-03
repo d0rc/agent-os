@@ -20,13 +20,13 @@ func NewAgentOSClient(url string) *AgentOSClient {
 	tr := &http.Transport{
 		MaxIdleConns:          10,
 		IdleConnTimeout:       15 * time.Second,
-		ResponseHeaderTimeout: 15 * time.Second,
+		ResponseHeaderTimeout: 3600 * time.Second,
 		DisableKeepAlives:     false,
 	}
 	return &AgentOSClient{
 		Url: url,
 		client: http.Client{
-			Timeout:   600 * time.Second,
+			Timeout:   3600 * time.Second,
 			Transport: tr,
 		},
 	}
@@ -69,7 +69,7 @@ const (
 	REP_IO
 )
 
-var maxParallelRequestsChannel = make(chan struct{}, 32)
+var maxParallelRequestsChannel = make(chan struct{}, 256)
 
 func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
 	timeout = 600 * time.Second

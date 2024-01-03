@@ -126,7 +126,7 @@ func (ie *InferenceEngine) Run() {
 								ie.Nodes[nodeIdx].LastIdleAt = time.Now()
 							}
 						} else {
-							time.Sleep(10 * time.Millisecond)
+							time.Sleep(100 * time.Millisecond)
 						}
 					}
 				}()

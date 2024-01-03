@@ -1,11 +1,8 @@
 package agency
 
 import (
-	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	os_client "github.com/d0rc/agent-os/os-client"
 	"sync/atomic"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) historyAppender() {
@@ -41,8 +38,8 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 	}
 }
 func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
-	_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+	/*_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName:        agentState.SystemName,
 		WriteMessagesTrace: []*engines.Message{message},
-	}, 120*time.Second, os_client.REP_IO)
+	}, 120*time.Second, os_client.REP_IO)*/
 }
