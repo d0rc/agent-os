@@ -60,7 +60,7 @@ func main() {
 	finalReportsSink := make(chan string)
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
-	// go agentState.ToTPipeline()
+	go agentState.ToTPipeline()
 
 	go func() {
 		reports := make([]string, 0)
