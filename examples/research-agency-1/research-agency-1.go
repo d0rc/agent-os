@@ -9,6 +9,7 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
+	"github.com/logrusorgru/aurora"
 	"os"
 	"strings"
 	"sync"
@@ -59,7 +60,7 @@ func main() {
 	finalReportsSink := make(chan string)
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
-	go agentState.ToTPipeline()
+	// go agentState.ToTPipeline()
 
 	go func() {
 		reports := make([]string, 0)
@@ -77,6 +78,19 @@ func main() {
 			}
 		}
 	}()
+
+	storedReports := make([]string, 0)
+	storedReportsData, err := os.ReadFile("/tmp/final-reports.json")
+	if err != nil {
+		lg.Fatal().Err(err).Msg("failed to read stored reports")
+	}
+	err = json.Unmarshal(storedReportsData, &storedReports)
+	if err != nil {
+		lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
+	}
+	for _, report := range storedReports {
+		finalReportsStream <- report
+	}
 
 	finalReports := make([]string, 0)
 	for finalReport := range finalReportsStream {
@@ -96,10 +110,9 @@ func main() {
 						continue
 					}
 
-					wg.Add(1)
-					go func(idxA, idxB int, reportA, reportB string) {
+					compareReports := func(idxA, idxB int, reportA, reportB string) {
 						defer wg.Done()
-						yes, updatedReports1, err := isReportABetter(client, agentState.InputVariables["goal"].(string), reportA, reportB)
+						yes, err := isReportABetter(client, finalReportsStream, agentState.InputVariables["goal"].(string), reportA, reportB)
 						if err != nil {
 							return
 						}
@@ -109,23 +122,11 @@ func main() {
 							lock.Unlock()
 							//ratings[idxB]--
 						}
+					}
 
-						no, updatedReports2, err := isReportABetter(client, agentState.InputVariables["goal"].(string), reportB, reportA)
-						if err != nil {
-							return
-						}
-						if no {
-							lock.Lock()
-							ratings[idxB]++
-							lock.Unlock()
-							//ratings[idxA]--
-						}
-
-						lock.Lock()
-						collectedUpdatedReports = append(collectedUpdatedReports, updatedReports1...)
-						collectedUpdatedReports = append(collectedUpdatedReports, updatedReports2...)
-						lock.Unlock()
-					}(idxA, idxB, reportA, reportB)
+					wg.Add(2)
+					go compareReports(idxA, idxB, reportA, reportB)
+					go compareReports(idxB, idxA, reportB, reportA)
 				}
 			}
 			wg.Wait()
@@ -175,11 +176,12 @@ Best report, has score of %d:
 Least scored report, has score of %d:
 %s
 `, maxVal, codeblock(reports[maxIdx]), minVal, codeblock(reports[minIdx]))
-	_ = os.WriteFile("reports-table.txt", []byte(fmt.Sprintf("Total reports: %d\n", len(reports))+sw), 0644)
+	info := fmt.Sprintf("Total reports: %d\n", len(reports)) + sw
+	_ = os.WriteFile("reports-table.txt", []byte(info), 0644)
+	fmt.Println(info)
 }
 
-func isReportABetter(client *os_client.AgentOSClient, goal string, a string, b string) (bool, []string, error) {
-	updatedReports := make([]string, 0)
+func isReportABetter(client *os_client.AgentOSClient, updatedReports chan string, goal string, a string, b string) (bool, error) {
 	prompt := `### Instruction:
 Primary goal:
 %s
@@ -198,14 +200,14 @@ Provide response in the following JSON format:
 {
     "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
     "best-report": "<A|B>",
-    "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
 }
 %s
 ### Assistant: `
+	// "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
 	type modelResponse struct {
-		Thoughts      string `json:"thoughts"`
-		BestReport    string `json:"best-report"`
-		UpdatedReport string `json:"updated-report"`
+		Thoughts   string `json:"thoughts"`
+		BestReport string `json:"best-report"`
+		// UpdatedReport string `json:"updated-report"`
 	}
 	parsedResponse := modelResponse{}
 	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```", "```")
@@ -258,10 +260,9 @@ Current choice is (parse error = %v):
 		}
 
 		if parsedResponse.BestReport == "A" || parsedResponse.BestReport == "B" {
-			updatedReport := parsedResponse.UpdatedReport
-			if updatedReport != "" && len(updatedReport) > 10 {
-				updatedReports = append(updatedReports, updatedReport)
-			}
+			//updatedReport := parsedResponse.UpdatedReport
+			// let's try to get updated report now
+			go generateUpdatedReport(client, prompt, choice, updatedReports)
 		}
 	}
 
@@ -270,7 +271,35 @@ Current choice is (parse error = %v):
 		goto retry
 	}
 
-	return votesA > votesB, updatedReports, nil
+	return votesA > votesB, nil
+}
+
+func generateUpdatedReport(client *os_client.AgentOSClient, prompt string, choice string, updatedReports chan string) {
+	updatedReportQuery := fmt.Sprintf(`%s%s
+### User: Provide full text of the updated and expanded report has been revised in markdown format.
+
+### Assistant: `, prompt, choice)
+
+retryUpdatedReport:
+	updatedReportResponse, err := client.RunRequest(&cmds.ClientRequest{
+		ProcessName: "final-reports-processor",
+		GetCompletionRequests: []cmds.GetCompletionRequest{
+			{
+				RawPrompt:  updatedReportQuery,
+				MinResults: 1,
+			},
+		},
+	}, 600*time.Second, os_client.REP_IO)
+	if err != nil {
+		time.Sleep(100 * time.Millisecond)
+		goto retryUpdatedReport
+	}
+
+	updatedReport := updatedReportResponse.GetCompletionResponse[0].Choices[0]
+	if updatedReport != "" && len(updatedReport) > 10 {
+		fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
+		updatedReports <- updatedReport
+	}
 }
 
 func codeblock(s string) string {
