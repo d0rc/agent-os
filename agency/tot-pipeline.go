@@ -77,13 +77,14 @@ func createTraverseContext(history []*engines.Message) *traverseContext {
 		if m.ID != nil {
 			MessageMap[*m.ID] = m
 		}
+		m.RLock()
 		if m.ReplyTo != nil {
-			m.RLock()
 			for k, _ := range m.ReplyTo {
 				RepliesMap[k] = append(RepliesMap[k], m)
 			}
-			m.RUnlock()
+
 		}
+		m.RUnlock()
 	}
 
 	return &traverseContext{
@@ -114,14 +115,16 @@ func (ctx *traverseContext) traverse(msg *engines.Message, path []*engines.Messa
 	}
 
 	for _, reply := range replies {
+		msg.RLock()
 		if msg.ReplyTo != nil {
-			msg.RLock()
 			_, exists := msg.ReplyTo[*reply.ID]
 			msg.RUnlock()
 			if exists {
 				// the msg can be a reply to `reply`
 				continue
 			}
+		} else {
+			msg.RUnlock()
 		}
 		ctx.traverse(reply, append([]*engines.Message{}, path...), callback)
 	}
