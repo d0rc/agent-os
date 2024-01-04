@@ -12,7 +12,7 @@ const MinimalVotingRatingForCommand = 7.0
 const ToTPathLenToTriggerTerminalCallback = 18
 const ResubmitSystemPromptAfter = 15 * time.Minute
 const MaxIoRequestsThreads = 16
-const WriteVotesLog = true
+const WriteVotesLog = false
 
 const MaxJobsPerAgent = 12
 const JobsManagerInferenceTimeout = 600 * time.Second

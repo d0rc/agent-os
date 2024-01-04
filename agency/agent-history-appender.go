@@ -22,9 +22,11 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 						storedMessage.Content = message.Content // fatal error!
 					}
 					alreadyExists = true
+					storedMessage.Lock()
 					for k, _ := range message.ReplyTo {
 						storedMessage.ReplyTo[k] = message.ReplyTo[k]
 					}
+					storedMessage.Unlock()
 				}
 			}
 			if !alreadyExists {
