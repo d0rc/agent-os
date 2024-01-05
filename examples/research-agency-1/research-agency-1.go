@@ -9,10 +9,10 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
-	"github.com/logrusorgru/aurora"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +20,8 @@ import (
 var agencyYaml []byte
 
 var termUi = false
+
+var reportsProcessed = uint64(0)
 
 func main() {
 	ts := time.Now()
@@ -60,7 +62,7 @@ func main() {
 	finalReportsSink := make(chan string)
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
-	go agentState.ToTPipeline()
+	// go agentState.ToTPipeline()
 
 	go func() {
 		reports := make([]string, 0)
@@ -93,7 +95,17 @@ func main() {
 	}
 
 	finalReports := make([]string, 0)
+	finalReportsDeDupe := make(map[string]struct{})
 	for finalReport := range finalReportsStream {
+		finalReport = strings.TrimSpace(finalReport)
+		if _, ok := finalReportsDeDupe[finalReport]; ok {
+			continue
+		}
+
+		atomic.AddUint64(&reportsProcessed, 1)
+
+		fmt.Printf("Processing final report: %s\n", finalReport)
+		finalReportsDeDupe[finalReport] = struct{}{}
 		fmt.Println(finalReport)
 		collectedUpdatedReports := make([]string, 0)
 		finalReports = append(finalReports, finalReport)
@@ -176,9 +188,15 @@ Best report, has score of %d:
 Least scored report, has score of %d:
 %s
 `, maxVal, codeblock(reports[maxIdx]), minVal, codeblock(reports[minIdx]))
-	info := fmt.Sprintf("Total reports: %d\n", len(reports)) + sw
+	info := fmt.Sprintf("Total reports: %d, reports selected: %d\n", atomic.LoadUint64(&reportsProcessed), len(reports)) + sw
 	_ = os.WriteFile("reports-table.txt", []byte(info), 0644)
 	fmt.Println(info)
+}
+
+type modelResponse struct {
+	Thoughts   string `json:"thoughts"`
+	BestReport string `json:"best-report"`
+	// UpdatedReport string `json:"updated-report"`
 }
 
 func isReportABetter(client *os_client.AgentOSClient, updatedReports chan string, goal string, a string, b string) (bool, error) {
@@ -202,15 +220,12 @@ Provide response in the following JSON format:
     "best-report": "<A|B>",
 }
 %s
-### Assistant: `
+### Assistant: 
+%s
+`
 	// "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
-	type modelResponse struct {
-		Thoughts   string `json:"thoughts"`
-		BestReport string `json:"best-report"`
-		// UpdatedReport string `json:"updated-report"`
-	}
 	parsedResponse := modelResponse{}
-	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```", "```")
+	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```json", "```", "```json")
 	minResults := 5
 retry:
 	response, err := client.RunRequest(&cmds.ClientRequest{
@@ -221,8 +236,9 @@ retry:
 				MinResults: minResults,
 			},
 		},
-	}, 600*time.Second, os_client.REP_IO)
+	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
+		fmt.Printf("Error getting response, going to retry")
 		goto retry
 	}
 
@@ -243,10 +259,10 @@ Current choice is (parse error = %v):
 			continue
 		}
 
-		if parsedResponse.BestReport == "A" {
+		if parsedResponse.BestReport == "A" || strings.HasPrefix(parsedResponse.BestReport, "A_") {
 			votesA++
 			resultsProcessed++
-		} else if parsedResponse.BestReport == "B" {
+		} else if parsedResponse.BestReport == "B" || strings.HasPrefix(parsedResponse.BestReport, "B_") {
 			votesB++
 			resultsProcessed++
 		} else if parsedResponse.BestReport == "Neither" || parsedResponse.BestReport == "A, B" || parsedResponse.BestReport == "A,B" {
@@ -262,23 +278,56 @@ Current choice is (parse error = %v):
 		if parsedResponse.BestReport == "A" || parsedResponse.BestReport == "B" {
 			//updatedReport := parsedResponse.UpdatedReport
 			// let's try to get updated report now
-			go generateUpdatedReport(client, prompt, choice, updatedReports)
+			go generateUpdatedReport(client, prompt, choice, updatedReports, parsedResponse, goal, a, b)
 		}
 	}
 
 	if resultsProcessed < 3 {
 		minResults++
+		fmt.Printf("Got not enough results (%d/%d), going to retry\n", resultsProcessed,
+			len(response.GetCompletionResponse[0].Choices))
+		if len(response.GetCompletionResponse[0].Choices) > 15 {
+			return false, fmt.Errorf("error getting parsable response")
+		}
 		goto retry
 	}
+	fmt.Printf("Got enough results (%d/%d) [%d vs %d]\n",
+		resultsProcessed,
+		len(response.GetCompletionResponse),
+		votesA, votesB)
 
 	return votesA > votesB, nil
 }
 
-func generateUpdatedReport(client *os_client.AgentOSClient, prompt string, choice string, updatedReports chan string) {
-	updatedReportQuery := fmt.Sprintf(`%s%s
-### User: Provide full text of the updated and expanded report has been revised in markdown format.
+func generateUpdatedReport(client *os_client.AgentOSClient, prompt string, choice string, updatedReports chan string,
+	parsedResponse modelResponse, goal, a, b string) {
+	updatedReportQuery := fmt.Sprintf(`### Instruction:
+Primary goal:
+%s
 
-### Assistant: `, prompt, choice)
+Your task is to compare following two reports:
+Report A:
+%s
+
+Report B:
+%s
+
+Which of the reports is more comprehensive and better aligns with the primary goal?
+
+### Assistant: %s
+
+Best report: %s
+
+### User: Summarize reports A and B into a single summary in markdown format:
+
+### Assistant:
+%s`,
+		codeblock(goal),
+		codeblock(a),
+		codeblock(b),
+		parsedResponse.Thoughts,
+		parsedResponse.BestReport,
+		"```json\n")
 
 retryUpdatedReport:
 	updatedReportResponse, err := client.RunRequest(&cmds.ClientRequest{
@@ -289,15 +338,21 @@ retryUpdatedReport:
 				MinResults: 1,
 			},
 		},
-	}, 600*time.Second, os_client.REP_IO)
+	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
 		time.Sleep(100 * time.Millisecond)
+		fmt.Printf("Error getting response for updated report, going to retry")
 		goto retryUpdatedReport
 	}
 
 	updatedReport := updatedReportResponse.GetCompletionResponse[0].Choices[0]
-	if updatedReport != "" && len(updatedReport) > 10 {
-		fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
+	contentCheck := strings.ReplaceAll(updatedReport, " ", "")
+	contentCheck = strings.ReplaceAll(contentCheck, "`", "")
+	contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
+	contentCheck = strings.ReplaceAll(contentCheck, "\r", "")
+	contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
+	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 {
+		// fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
 		updatedReports <- updatedReport
 	}
 }
