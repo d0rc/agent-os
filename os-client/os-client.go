@@ -98,6 +98,7 @@ retry:
 		fmt.Printf("%s running OS request, going to try: %v\n",
 			aurora.BrightRed("error"),
 			aurora.BrightGreen(err))
+		time.Sleep(300 * time.Millisecond)
 		goto retry
 	}
 

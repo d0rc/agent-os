@@ -49,7 +49,7 @@ func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *I
 	return &InferenceEngine{
 		Nodes:                      []*InferenceNode{},
 		AddNodeChan:                make(chan *InferenceNode, 16384),
-		IncomingJobs:               make(chan []*ComputeJob, 1),
+		IncomingJobs:               make(chan []*ComputeJob),
 		InferenceDone:              make(chan *InferenceNode, 16384),
 		ProcessesTotalRequests:     map[string]uint64{},
 		ProcessesTotalJobs:         make(map[string]uint64),

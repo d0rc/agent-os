@@ -8,7 +8,7 @@ import (
 const NumberOfVotesToCache = 3
 const VoterMinResults = 3
 const MinimumNumberOfVotes = 3
-const MinimalVotingRatingForCommand = 7.0
+const MinimalVotingRatingForCommand = 5.0
 const ToTPathLenToTriggerTerminalCallback = 18
 const ResubmitSystemPromptAfter = 15 * time.Minute
 const MaxIoRequestsThreads = 16

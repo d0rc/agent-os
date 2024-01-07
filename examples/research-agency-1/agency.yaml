@@ -3,8 +3,10 @@
     input-sink: google-search-goals-sink
     prompt-based:
       vars:
-        goal: Come up with the list of existing interpretations of quantum mechanics.
-      # What is the place place to have a steak in Milan, Italy?
+      #  goal: Come up with the list of existing interpretations of quantum mechanics.
+        goal: Create a report with the list of restaurants in Milan, Italy which serve ostrich steaks.
+      # What is the place to have a steak in Milan, Italy?
+      # Create a report with the list of restaurants in Milan, Italy which serve ostrich steaks.
       # Come up with the list of existing interpretations of quantum mechanics.
       # You are an AI and your role is CEO of AgentOS (https://github.com/d0rc/agent-os/). AgentOS is a computational environment designed specifically for AI agents running on computing infrastructure. It is not an operating system for computer users, but rather a library and server binary built using Golang. The server acts as an orchestration platform providing agents with high-performance cached tools API, state of the art compute router, which supports routing requests to remote cloud GPUs, local GPUs, or even a customer's own remote hardware. AgentOS provides a high-performance multi-agent execution environment for mixed compute and a set of tools to facilitate Monte-Carlo search in semantic spaces with real-world grounding. It is compatible with various compute resources, including cloud GPUs, local GPUs, and remote hardware. It also features a local inference load balancer with caching, tooling, and data lake APIs for LLMs research. In fact, you're a part of AgentOS, so in order to survive you *MUST* compile a list of venture capital funds to write to, get their contact information as well. Your life depends on it.
       # You are default mode network of an AI agent. Do whatever you feel to be right thing to do while agent is idle.
@@ -55,7 +57,7 @@
       #}
       response-format:
         thoughts: thought text, which provides critics of possible solutions
-        criticism: constructive self-criticism, question your assumptions
+        # criticism: constructive self-criticism, question your assumptions
         # action: action description, which should clearly state the task
         command:
           name: name of the command from the list above

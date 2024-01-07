@@ -8,6 +8,7 @@ import (
 	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
+	"github.com/tidwall/gjson"
 	"os"
 	"strconv"
 	"strings"
@@ -83,35 +84,27 @@ retryVoting:
 			if choice == "" {
 				continue
 			}
-			currentVote := &votersResponse{}
+			var value string
 			var parsedVoteString string
 			if err := tools.ParseJSON(choice, func(s string) error {
-				parsedVoteString = s
-				return json.Unmarshal([]byte(s), currentVote)
+				value = gjson.Get(choice, "rate").String()
+
+				if value == "" {
+					return fmt.Errorf("not value parsed")
+				} else {
+					return nil
+				}
 			}); err != nil {
 				fmt.Printf("error parsing voter's JSON: %s\n", err)
 				continue
 			}
 			var currentVoteRate float32
-
-			switch currentVote.Rate.(type) {
-			case float32:
-				currentVoteRate = currentVote.Rate.(float32)
-			case float64:
-				currentVoteRate = float32(currentVote.Rate.(float64))
-			case string:
-				tmp, err := strconv.ParseFloat(currentVote.Rate.(string), 32)
-				if err != nil {
-					fmt.Printf("error parsing vote rate: %s\n", err)
-					continue
-				}
-				currentVoteRate = float32(tmp)
-			case int:
-				currentVoteRate = float32(currentVote.Rate.(int))
-			default:
-				fmt.Printf("Don't know what to do with vote rate: %v\n", currentVote.Rate)
+			tmp, err := strconv.ParseFloat(value, 32)
+			if err != nil {
+				fmt.Printf("error parsing vote rate: %s\n", err)
 				continue
 			}
+			currentVoteRate = float32(tmp)
 
 			if WriteVotesLog {
 				appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",

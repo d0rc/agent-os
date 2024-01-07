@@ -62,7 +62,7 @@ func main() {
 	finalReportsSink := make(chan string)
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
-	// go agentState.ToTPipeline()
+	go agentState.ToTPipeline()
 
 	go func() {
 		reports := make([]string, 0)
@@ -84,14 +84,15 @@ func main() {
 	storedReports := make([]string, 0)
 	storedReportsData, err := os.ReadFile("/tmp/final-reports.json")
 	if err != nil {
-		lg.Fatal().Err(err).Msg("failed to read stored reports")
-	}
-	err = json.Unmarshal(storedReportsData, &storedReports)
-	if err != nil {
-		lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
-	}
-	for _, report := range storedReports {
-		finalReportsStream <- report
+		lg.Error().Err(err).Msg("failed to read stored reports")
+	} else {
+		err = json.Unmarshal(storedReportsData, &storedReports)
+		if err != nil {
+			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
+		}
+		for _, report := range storedReports {
+			finalReportsStream <- report
+		}
 	}
 
 	finalReports := make([]string, 0)
@@ -107,7 +108,6 @@ func main() {
 		fmt.Printf("Processing final report: %s\n", finalReport)
 		finalReportsDeDupe[finalReport] = struct{}{}
 		fmt.Println(finalReport)
-		collectedUpdatedReports := make([]string, 0)
 		finalReports = append(finalReports, finalReport)
 		if len(finalReports) > 2 {
 			ratings := make(map[int]int)
@@ -153,12 +153,6 @@ func main() {
 				newFinalReports = append(newFinalReports, finalReports[idx])
 			}
 			finalReports = newFinalReports
-
-			go func(reports []string) {
-				for _, report := range reports {
-					finalReportsStream <- report
-				}
-			}(collectedUpdatedReports)
 		}
 	}
 
@@ -201,6 +195,8 @@ type modelResponse struct {
 
 func isReportABetter(client *os_client.AgentOSClient, updatedReports chan string, goal string, a string, b string) (bool, error) {
 	prompt := `### Instruction:
+You are Report Comparing AI. You have to pick the best report for the primary goal.
+
 Primary goal:
 %s
 
@@ -230,12 +226,11 @@ Provide response in the following JSON format:
 retry:
 	response, err := client.RunRequest(&cmds.ClientRequest{
 		ProcessName: "final-reports-processor",
-		GetCompletionRequests: []cmds.GetCompletionRequest{
-			{
-				RawPrompt:  prompt,
-				MinResults: minResults,
-			},
-		},
+		GetCompletionRequests: replicate(cmds.GetCompletionRequest{
+			RawPrompt:   prompt,
+			MinResults:  minResults,
+			Temperature: 0.9,
+		}, minResults),
 	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
 		fmt.Printf("Error getting response, going to retry")
@@ -245,7 +240,8 @@ retry:
 	votesA := 0
 	votesB := 0
 	resultsProcessed := 0
-	for _, choice := range response.GetCompletionResponse[0].Choices {
+	goodChoice := ""
+	for _, choice := range flattenChoices(response.GetCompletionResponse) {
 		choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 		err := tools.ParseJSON(choice, func(s string) error {
 			return json.Unmarshal([]byte(s), &parsedResponse)
@@ -278,7 +274,7 @@ Current choice is (parse error = %v):
 		if parsedResponse.BestReport == "A" || parsedResponse.BestReport == "B" {
 			//updatedReport := parsedResponse.UpdatedReport
 			// let's try to get updated report now
-			go generateUpdatedReport(client, prompt, choice, updatedReports, parsedResponse, goal, a, b)
+			goodChoice = choice
 		}
 	}
 
@@ -291,6 +287,11 @@ Current choice is (parse error = %v):
 		}
 		goto retry
 	}
+
+	if goodChoice != "" {
+		go generateUpdatedReport(client, prompt, goodChoice, updatedReports, parsedResponse, goal, a, b)
+	}
+
 	fmt.Printf("Got enough results (%d/%d) [%d vs %d]\n",
 		resultsProcessed,
 		len(response.GetCompletionResponse),
@@ -299,9 +300,30 @@ Current choice is (parse error = %v):
 	return votesA > votesB, nil
 }
 
+func flattenChoices(response []*cmds.GetCompletionResponse) []string {
+	result := make([]string, 0)
+	for _, choice := range response {
+		for _, c := range choice.Choices {
+			result = append(result, c)
+		}
+	}
+
+	return result
+}
+
+func replicate[T any](request T, results int) []T {
+	result := make([]T, results)
+	for i := 0; i < results; i++ {
+		result[i] = request
+	}
+
+	return result
+}
+
 func generateUpdatedReport(client *os_client.AgentOSClient, prompt string, choice string, updatedReports chan string,
 	parsedResponse modelResponse, goal, a, b string) {
 	updatedReportQuery := fmt.Sprintf(`### Instruction:
+You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
 Primary goal:
 %s
 
@@ -334,8 +356,9 @@ retryUpdatedReport:
 		ProcessName: "final-reports-processor",
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
-				RawPrompt:  updatedReportQuery,
-				MinResults: 1,
+				RawPrompt:   updatedReportQuery,
+				MinResults:  1,
+				Temperature: 0.1,
 			},
 		},
 	}, 600*time.Second, os_client.REP_Default)
@@ -351,7 +374,10 @@ retryUpdatedReport:
 	contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
 	contentCheck = strings.ReplaceAll(contentCheck, "\r", "")
 	contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
-	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 {
+	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 &&
+		!strings.Contains(updatedReport, "Report A") &&
+		!strings.Contains(updatedReport, "Report B") {
+		updatedReports <- updatedReport
 		// fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
 		updatedReports <- updatedReport
 	}
