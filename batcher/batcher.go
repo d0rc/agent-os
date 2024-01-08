@@ -34,14 +34,15 @@ func NewBatcher[T any](id string, op func([]T) error, batchSize int, latency tim
 
 	go func(b *Batcher[T]) {
 		tasks := make([]T, 0)
+		timer := time.NewTimer(b.latency)
 		for {
-			timer := time.NewTimer(b.latency)
 			timerAlarm := false
 			select {
 			case <-b.stopChan:
 				return
 			case task := <-b.tasksChan:
 				tasks = append(tasks, task)
+				timer.Reset(b.latency)
 			case <-timer.C:
 				if len(tasks) > 0 {
 					timerAlarm = true

@@ -3,14 +3,8 @@ package agency
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
-	os_client "github.com/d0rc/agent-os/os-client"
 	"sync/atomic"
-	"time"
 )
-
-const MaxJobsPerAgent = 128
-const JobsManagerInferenceTimeout = 600 * time.Second
-const JobsManagerExecutionPool = os_client.REP_Default
 
 // jobsChannelManager is responsible for getting jobs from agentState.jobsChannel
 // and executing these not more than MaxJobsPerAgent at the same time

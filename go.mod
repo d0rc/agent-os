@@ -19,6 +19,7 @@ require (
 	github.com/rs/zerolog v1.31.0
 	github.com/serpapi/google-search-results-golang v0.0.0-20230616000151-95707d993dc6
 	github.com/shirou/gopsutil v3.21.11+incompatible
+	github.com/tidwall/gjson v1.17.0
 	github.com/unum-cloud/usearch/golang v0.0.0-20231126121226-c2463ca3a043
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
 	github.com/xitongsys/parquet-go v1.6.2
@@ -47,6 +48,8 @@ require (
 	github.com/mitchellh/go-wordwrap v0.0.0-20150314170334-ad45545899c7 // indirect
 	github.com/nsf/termbox-go v0.0.0-20190121233118-02980233997d // indirect
 	github.com/pierrec/lz4/v4 v4.1.8 // indirect
+	github.com/tidwall/match v1.1.1 // indirect
+	github.com/tidwall/pretty v1.2.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.12 // indirect
 	github.com/tklauser/numcpus v0.6.1 // indirect
 	github.com/xitongsys/parquet-go-source v0.0.0-20200817004010-026bad9b25d0 // indirect
