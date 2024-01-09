@@ -41,6 +41,7 @@ type GeneralAgentInfo struct {
 	jobsSubmittedTs    time.Time
 	jobsReceived       uint64
 	jobsFinished       uint64
+	historyUpdated     chan struct{}
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
@@ -69,6 +70,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		quitChannelJobs:        make(chan struct{}, 1),
 		quitChannelResults:     make(chan struct{}, 1),
 		quitChannelProcessing:  make(chan struct{}, 1),
+		historyUpdated:         make(chan struct{}, 1),
 		//quitIoProcessing:         make(chan struct{}, 1),
 		quitHistoryAppender: make(chan struct{}, 1),
 		systemWriterChannel: make(chan *engines.Message, 100),

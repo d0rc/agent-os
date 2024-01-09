@@ -32,6 +32,7 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 			if !alreadyExists {
 				//fmt.Printf("Adding new message to history: %s\n", *messageId)
 				agentState.History = append(agentState.History, message)
+				agentState.historyUpdated <- struct{}{}
 				atomic.AddInt32(&agentState.historySize, 1)
 			}
 		case message = <-agentState.systemWriterChannel:

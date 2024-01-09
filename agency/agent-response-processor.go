@@ -251,7 +251,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 		notesLock.Lock()
 		listAllNotesSubs = append(listAllNotesSubs, reactiveResultSink)
 		notesLock.Unlock()
-	case "final-report":
+	case "final-report", "periodic-report", "interim-report":
 		data := args["text"]
 		switch data.(type) {
 		case string:

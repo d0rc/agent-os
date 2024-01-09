@@ -41,7 +41,7 @@ Respond in the JSON format:
     "thought": "thought text, which provides critics of possible solutions",
     "criticism": "constructive self-criticism, question your assumptions",
     "feedback": "provide your feedback on the command and it's alignment to the purpose, suggest refinements here",
-    "rate": "rate probability on scale from 0 to 10"
+    "rate": "rate probability on scale from 1 to 5"
 }`
 
 	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n", question)
@@ -57,13 +57,12 @@ retryVoting:
 	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
 		Priority:    borrow_engine.PRIO_User,
-		GetCompletionRequests: []cmds.GetCompletionRequest{
-			{
+		GetCompletionRequests: tools.Replicate(
+			cmds.GetCompletionRequest{
 				RawPrompt:  systemMessage,
 				MinResults: minResults,
-			},
-		},
-	}, 120*time.Second, os_client.REP_IO)
+			}, minResults),
+	}, 120*time.Second, os_client.REP_Default)
 	if err != nil {
 		return 0, fmt.Errorf("error running voters inference request: %w", err)
 	}
@@ -75,51 +74,45 @@ retryVoting:
 	currentRating := float32(0)
 	listOfRatings := make([]float32, 0)
 	numberOfVotes := 0
-	for _, getCompletionResponse := range serverResponse.GetCompletionResponse {
-		if getCompletionResponse == nil || getCompletionResponse.Choices == nil {
+	for _, choice := range tools.FlattenChoices(serverResponse.GetCompletionResponse) {
+		if choice == "" {
 			continue
 		}
+		var value string
+		var parsedVoteString string
+		if err := tools.ParseJSON(choice, func(s string) error {
+			value = gjson.Get(choice, "rate").String()
 
-		for _, choice := range getCompletionResponse.Choices {
-			if choice == "" {
-				continue
+			if value == "" {
+				return fmt.Errorf("not value parsed")
+			} else {
+				return nil
 			}
-			var value string
-			var parsedVoteString string
-			if err := tools.ParseJSON(choice, func(s string) error {
-				value = gjson.Get(choice, "rate").String()
-
-				if value == "" {
-					return fmt.Errorf("not value parsed")
-				} else {
-					return nil
-				}
-			}); err != nil {
-				fmt.Printf("error parsing voter's JSON: %s\n", err)
-				continue
-			}
-			var currentVoteRate float32
-			tmp, err := strconv.ParseFloat(value, 32)
-			if err != nil {
-				fmt.Printf("error parsing vote rate: %s\n", err)
-				continue
-			}
-			currentVoteRate = float32(tmp)
-
-			if WriteVotesLog {
-				appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
-					initialGoal,
-					strings.TrimSpace(actionDescription),
-					question,
-					strings.TrimSpace(parsedVoteString),
-					currentVoteRate,
-				))
-				exportVoterTrainingData(initialGoal, actionDescription, parsedVoteString, currentVoteRate)
-			}
-			currentRating += currentVoteRate
-			numberOfVotes++
-			listOfRatings = append(listOfRatings, currentVoteRate)
+		}); err != nil {
+			fmt.Printf("error parsing voter's JSON: %s\n", err)
+			continue
 		}
+		var currentVoteRate float32
+		tmp, err := strconv.ParseFloat(value, 32)
+		if err != nil {
+			fmt.Printf("error parsing vote rate: %s\n", err)
+			continue
+		}
+		currentVoteRate = float32(tmp)
+
+		if WriteVotesLog {
+			appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
+				initialGoal,
+				strings.TrimSpace(actionDescription),
+				question,
+				strings.TrimSpace(parsedVoteString),
+				currentVoteRate,
+			))
+			exportVoterTrainingData(initialGoal, actionDescription, parsedVoteString, currentVoteRate)
+		}
+		currentRating += currentVoteRate
+		numberOfVotes++
+		listOfRatings = append(listOfRatings, currentVoteRate)
 	}
 
 	if minResults < len(serverResponse.GetCompletionResponse[0].Choices) {

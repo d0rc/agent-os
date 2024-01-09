@@ -27,6 +27,8 @@
         
         - list-notes - use it get names of last 50 notes you've made;
         
+        - interim-report - use it to report your preliminary results, name: "interim-report", args: "text": "provide all information available on your findings";
+        
         - final-report - use it to deliver the solution, name: "final-report", args: "text": "solution with all the useful details, including URLs, names, section titles, etc.".
 
 

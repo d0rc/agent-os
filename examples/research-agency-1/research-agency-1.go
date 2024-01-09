@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/engines"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
@@ -105,14 +106,20 @@ func main() {
 
 		atomic.AddUint64(&reportsProcessed, 1)
 
+		againCounter := 0
+
 		fmt.Printf("Processing final report: %s\n", finalReport)
 		finalReportsDeDupe[finalReport] = struct{}{}
 		fmt.Println(finalReport)
 		finalReports = append(finalReports, finalReport)
+	again:
+		againCounter++
 		if len(finalReports) > 2 {
+			newFinalReports := make([]string, 0)
 			ratings := make(map[int]int)
 			wg := sync.WaitGroup{}
-			lock := sync.RWMutex{}
+			//lock := sync.RWMutex{}
+			agentGoal := agentState.InputVariables["goal"].(string)
 			for idxA, reportA := range finalReports {
 				for idxB, reportB := range finalReports {
 					if idxA == idxB {
@@ -122,23 +129,34 @@ func main() {
 						continue
 					}
 
-					compareReports := func(idxA, idxB int, reportA, reportB string) {
+					wg.Add(1)
+					go func(idxA, idxB int, reportA, reportB string) {
 						defer wg.Done()
-						yes, err := isReportABetter(client, finalReportsStream, agentState.InputVariables["goal"].(string), reportA, reportB)
-						if err != nil {
-							return
-						}
-						if yes {
-							lock.Lock()
-							ratings[idxA]++
-							lock.Unlock()
-							//ratings[idxB]--
-						}
-					}
+						/*
+							compareReports := func(idxA, idxB int, reportA, reportB string) {
+								defer wg.Done()
+								yes, err := isReportABetter(client, agentGoal, reportA, reportB)
+								if err != nil {
+									return
+								}
+								if yes {
+									lock.Lock()
+									ratings[idxA]++
+									lock.Unlock()
+									//ratings[idxB]--
+								}
+							}*/
 
-					wg.Add(2)
-					go compareReports(idxA, idxB, reportA, reportB)
-					go compareReports(idxB, idxA, reportB, reportA)
+						//wg.Add(1)
+						//go compareReports(idxA, idxB, reportA, reportB)
+						//go compareReports(idxB, idxA, reportB, reportA)
+						if againCounter == 1 {
+							updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
+							if updatedReport != "" {
+								newFinalReports = append(newFinalReports, updatedReport)
+							}
+						}
+					}(idxA, idxB, reportA, reportB)
 				}
 			}
 			wg.Wait()
@@ -146,20 +164,23 @@ func main() {
 			fmt.Printf("ratings: %v\n", ratings)
 
 			// print reports from worth to best
-			printReports(ratings, finalReports)
+			printReports(ratings, finalReports, finalReportsStream)
 			// dropping all current reports, leaving only those which scored
-			newFinalReports := make([]string, 0)
+
 			for idx, _ := range ratings {
 				newFinalReports = append(newFinalReports, finalReports[idx])
 			}
 			finalReports = newFinalReports
+			if againCounter < 3 {
+				goto again
+			}
 		}
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(ts))
 }
 
-func printReports(ratings map[int]int, reports []string) {
+func printReports(ratings map[int]int, reports []string, reportsStream chan string) {
 	minVal := ratings[0]
 	minIdx := 0
 	maxVal := ratings[0]
@@ -182,18 +203,23 @@ Best report, has score of %d:
 Least scored report, has score of %d:
 %s
 `, maxVal, codeblock(reports[maxIdx]), minVal, codeblock(reports[minIdx]))
-	info := fmt.Sprintf("Total reports: %d, reports selected: %d\n", atomic.LoadUint64(&reportsProcessed), len(reports)) + sw
+	info := fmt.Sprintf("Total reports: %d, reports selected: %d, queue len: %d\n",
+		atomic.LoadUint64(&reportsProcessed),
+		len(reports),
+		len(reportsStream)) + sw
 	_ = os.WriteFile("reports-table.txt", []byte(info), 0644)
 	fmt.Println(info)
 }
 
 type modelResponse struct {
-	Thoughts   string `json:"thoughts"`
+	//Thoughts   string `json:"thoughts"`
 	BestReport string `json:"best-report"`
 	// UpdatedReport string `json:"updated-report"`
 }
 
-func isReportABetter(client *os_client.AgentOSClient, updatedReports chan string, goal string, a string, b string) (bool, error) {
+var errCounter uint64 = 0
+
+func isReportABetter(client *os_client.AgentOSClient, goal string, a string, b string) (bool, error) {
 	prompt := `### Instruction:
 You are Report Comparing AI. You have to pick the best report for the primary goal.
 
@@ -226,7 +252,7 @@ Provide response in the following JSON format:
 retry:
 	response, err := client.RunRequest(&cmds.ClientRequest{
 		ProcessName: "final-reports-processor",
-		GetCompletionRequests: replicate(cmds.GetCompletionRequest{
+		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
 			RawPrompt:   prompt,
 			MinResults:  minResults,
 			Temperature: 0.9,
@@ -240,19 +266,54 @@ retry:
 	votesA := 0
 	votesB := 0
 	resultsProcessed := 0
-	goodChoice := ""
-	for _, choice := range flattenChoices(response.GetCompletionResponse) {
+	//goodChoice := ""
+	for _, choice := range tools.FlattenChoices(response.GetCompletionResponse) {
 		choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
-		err := tools.ParseJSON(choice, func(s string) error {
-			return json.Unmarshal([]byte(s), &parsedResponse)
-		})
-		_ = os.WriteFile("/tmp/final-report-vote.txt", []byte(fmt.Sprintf(`
-Collected updated reports: %d
-Current choice is (parse error = %v):
-%s
-`, len(updatedReports), err, choice)), 0644)
-		if err != nil {
+		if isStringContains(choice, []string{
+			`"best-report": "A|B"`,
+			`best-report": "A and B"`,
+			`best-report": "A, B"`,
+			`best-report": "<A|B>"`,
+			`best-report": "<A,B>"`,
+			`best-report": "<A, B>"`,
+			`best-report": "<B|A>"`,
+			`best-report": "<BOTH A and B>"`,
+			`best-report": "both"`,
+		}) {
+			if len(a) > len(b) {
+				votesA++
+			} else {
+				votesB++
+			}
+			resultsProcessed++
 			continue
+		} else if isStringContains(choice, []string{
+			`"best-report": "A"`,
+			`"best-report": "Report A"`,
+			`"best-report": "ReportA"`,
+			`"best-report": "<A>"`,
+			`"best-report": "Report A with the addendum of having the detailed information about the restaurants as displayed in report B."`,
+		}) {
+			parsedResponse.BestReport = "A"
+			//parsedResponse.Thoughts = ""
+		} else if isStringContains(choice, []string{
+			`"best-report": "B"`,
+			`"best-report": "Report B"`,
+			`"best-report": "ReportB"`,
+			`"best-report": "<B>"`}) {
+			parsedResponse.BestReport = "B"
+			//parsedResponse.Thoughts = ""
+		} else {
+			err := tools.ParseJSON(choice, func(s string) error {
+				return json.Unmarshal([]byte(s), &parsedResponse)
+			})
+			_ = os.WriteFile("/tmp/final-report-vote.txt", []byte(fmt.Sprintf(`
+Current choice is (total errors = %d, parse error = %v):
+%s
+`, atomic.AddUint64(&errCounter, 1), err, choice)), 0644)
+			if err != nil {
+				continue
+			}
 		}
 
 		if parsedResponse.BestReport == "A" || strings.HasPrefix(parsedResponse.BestReport, "A_") {
@@ -274,7 +335,7 @@ Current choice is (parse error = %v):
 		if parsedResponse.BestReport == "A" || parsedResponse.BestReport == "B" {
 			//updatedReport := parsedResponse.UpdatedReport
 			// let's try to get updated report now
-			goodChoice = choice
+			//goodChoice = choice
 		}
 	}
 
@@ -288,10 +349,6 @@ Current choice is (parse error = %v):
 		goto retry
 	}
 
-	if goodChoice != "" {
-		go generateUpdatedReport(client, prompt, goodChoice, updatedReports, parsedResponse, goal, a, b)
-	}
-
 	fmt.Printf("Got enough results (%d/%d) [%d vs %d]\n",
 		resultsProcessed,
 		len(response.GetCompletionResponse),
@@ -300,28 +357,8 @@ Current choice is (parse error = %v):
 	return votesA > votesB, nil
 }
 
-func flattenChoices(response []*cmds.GetCompletionResponse) []string {
-	result := make([]string, 0)
-	for _, choice := range response {
-		for _, c := range choice.Choices {
-			result = append(result, c)
-		}
-	}
-
-	return result
-}
-
-func replicate[T any](request T, results int) []T {
-	result := make([]T, results)
-	for i := 0; i < results; i++ {
-		result[i] = request
-	}
-
-	return result
-}
-
-func generateUpdatedReport(client *os_client.AgentOSClient, prompt string, choice string, updatedReports chan string,
-	parsedResponse modelResponse, goal, a, b string) {
+func generateUpdatedReport(client *os_client.AgentOSClient, updatedReports chan string,
+	goal, a, b string) string {
 	updatedReportQuery := fmt.Sprintf(`### Instruction:
 You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
 Primary goal:
@@ -334,12 +371,6 @@ Report A:
 Report B:
 %s
 
-Which of the reports is more comprehensive and better aligns with the primary goal?
-
-### Assistant: %s
-
-Best report: %s
-
 ### User: Summarize reports A and B into a single summary in markdown format:
 
 ### Assistant:
@@ -347,8 +378,6 @@ Best report: %s
 		codeblock(goal),
 		codeblock(a),
 		codeblock(b),
-		parsedResponse.Thoughts,
-		parsedResponse.BestReport,
 		"```json\n")
 
 retryUpdatedReport:
@@ -376,13 +405,53 @@ retryUpdatedReport:
 	contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
 	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 &&
 		!strings.Contains(updatedReport, "Report A") &&
-		!strings.Contains(updatedReport, "Report B") {
-		updatedReports <- updatedReport
+		!strings.Contains(updatedReport, "Report B") &&
+		!strings.Contains(updatedReport, "Reports A") {
+		ratings := make(map[string]int)
+		reportsList := append([]string{}, a, b, updatedReport)
+		updatedReportId := engines.GenerateMessageId(updatedReport)
+		for _, reportA := range reportsList {
+			reportAId := engines.GenerateMessageId(reportA)
+			for _, reportB := range reportsList {
+				reportBId := engines.GenerateMessageId(reportB)
+				if reportAId == reportBId {
+					continue
+				}
+				if !(reportAId == updatedReportId || reportBId == updatedReportId) {
+					continue
+				}
+				isBetter, err := isReportABetter(client, goal, reportA, reportB)
+				if err != nil {
+					continue
+				}
+				if isBetter {
+					ratings[reportAId]++
+				}
+			}
+		}
+
+		if ratings[updatedReportId] > 0 {
+			if updatedReport != "" && updatedReports != nil {
+				updatedReports <- updatedReport
+			}
+
+			return updatedReport
+		}
 		// fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
-		updatedReports <- updatedReport
 	}
+
+	return ""
 }
 
 func codeblock(s string) string {
 	return fmt.Sprintf("```\n%s\n```", s)
+}
+
+func isStringContains(a string, b []string) bool {
+	for _, c := range b {
+		if strings.Contains(a, c) {
+			return true
+		}
+	}
+	return false
 }

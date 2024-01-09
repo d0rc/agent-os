@@ -9,14 +9,32 @@ import (
 )
 
 func (agentState *GeneralAgentInfo) ToTPipeline() {
+	var jobsSent = int(0)
+	timer := time.NewTimer(5 * time.Second)
 	for {
-		if atomic.LoadUint64(&agentState.jobsFinished) < atomic.LoadUint64(&agentState.jobsReceived) {
-			time.Sleep(10 * time.Millisecond)
+		jobsFinished := atomic.LoadUint64(&agentState.jobsFinished)
+		jobsReceived := atomic.LoadUint64(&agentState.jobsReceived)
+
+		if jobsFinished >= jobsReceived {
+			jobsSent, _ = agentState.totPipelineStep()
 		} else {
-			jobsSent, _ := agentState.totPipelineStep()
-			if jobsSent == 0 {
-				time.Sleep(500 * time.Millisecond)
-			}
+			jobsSent = 0
+		}
+
+		if len(agentState.historyUpdated) > 0 {
+			<-agentState.historyUpdated
+		}
+
+		if jobsSent > 0 {
+			continue
+		}
+
+		select {
+		case <-agentState.historyUpdated:
+			// we can try again - we have a new message here...!
+		case <-timer.C:
+			// five seconds have passed...!
+			timer.Reset(5 * time.Second)
 		}
 	}
 }
@@ -53,9 +71,12 @@ func (agentState *GeneralAgentInfo) totPipelineStep() (int, error) {
 		aurora.BrightBlue(agentState.Settings.Agent.Name),
 		time.Since(ts), terminalMessages, jobsSubmitted, lengthStats)
 
-	if jobsSubmitted == 0 && time.Since(agentState.jobsSubmittedTs) > ResubmitSystemPromptAfter &&
-		atomic.LoadUint64(&agentState.jobsFinished) == atomic.LoadUint64(&agentState.jobsReceived) {
-		agentState.Stop()
+	if jobsSubmitted == 0 {
+		tsljb := time.Since(agentState.jobsSubmittedTs)
+		if tsljb > ResubmitSystemPromptAfter &&
+			atomic.LoadUint64(&agentState.jobsFinished) == atomic.LoadUint64(&agentState.jobsReceived) {
+			agentState.Stop()
+		}
 	}
 
 	return jobsSubmitted, nil

@@ -10,7 +10,9 @@ import (
 	"github.com/d0rc/agent-os/server"
 	"github.com/d0rc/agent-os/utils"
 	"io"
+	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 )
 
@@ -25,6 +27,10 @@ var topInterval = flag.Int("top-interval", 1000, "interval to update `top` (ms)"
 var termUi = flag.Bool("term-ui", true, "enable term ui")
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	lg, logChan := utils.ConsoleInit("ai-srv", termUi)
 
 	ctx, err := server.NewContext("config.yaml", lg, &server.Settings{
