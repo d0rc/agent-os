@@ -3,8 +3,9 @@
     input-sink: google-search-goals-sink
     prompt-based:
       vars:
-      #  goal: Come up with the list of existing interpretations of quantum mechanics.
         goal: Create a report with the list of restaurants in Milan, Italy which serve ostrich steaks.
+      #  goal: Come up with the list of existing interpretations of quantum mechanics.
+      #  goal: Create a report with the list of restaurants in Milan, Italy which serve ostrich steaks.
       # What is the place to have a steak in Milan, Italy?
       # Create a report with the list of restaurants in Milan, Italy which serve ostrich steaks.
       # Come up with the list of existing interpretations of quantum mechanics.

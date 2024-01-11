@@ -8,11 +8,11 @@ import (
 const NumberOfVotesToCache = 3
 const VoterMinResults = 1
 const MinimumNumberOfVotes = 1
-const MinimalVotingRatingForCommand = 2.0
+const MinimalVotingRatingForCommand = 3.5
 const ToTPathLenToTriggerTerminalCallback = 18
 const ResubmitSystemPromptAfter = 15 * time.Minute
 const MaxIoRequestsThreads = 16
-const WriteVotesLog = false
+const WriteVotesLog = true
 
 const MaxJobsPerAgent = 12
 const JobsManagerInferenceTimeout = 600 * time.Second

@@ -22,6 +22,11 @@ var votesCache = make(map[string]float32)
 var votesCacheLock = sync.RWMutex{}
 
 func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription string) (float32, error) {
+	if strings.Contains(actionDescription, "final-report") ||
+		strings.Contains(actionDescription, "interim-report") {
+		return 10, nil
+	}
+
 	votesCacheLock.RLock()
 	if _, exists := votesCache[actionDescription]; exists {
 		voteValue := votesCache[actionDescription]
@@ -101,14 +106,14 @@ retryVoting:
 		currentVoteRate = float32(tmp)
 
 		if WriteVotesLog {
-			appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
+			/*appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
 				initialGoal,
 				strings.TrimSpace(actionDescription),
 				question,
 				strings.TrimSpace(parsedVoteString),
 				currentVoteRate,
-			))
-			exportVoterTrainingData(initialGoal, actionDescription, parsedVoteString, currentVoteRate)
+			))*/
+			exportVoterTrainingData(agentState.SystemName, initialGoal, actionDescription, parsedVoteString, currentVoteRate)
 		}
 		currentRating += currentVoteRate
 		numberOfVotes++
@@ -153,20 +158,22 @@ retryVoting:
 	return finalRating, nil
 }
 
-func exportVoterTrainingData(goal string, description string, voteString string, rate float32) {
+func exportVoterTrainingData(agentName, goal string, description string, voteString string, rate float32) {
 	type voterTrainingDataRecord struct {
-		Goal   string  `json:"goal"`
-		Action string  `json:"action"`
-		Vote   string  `json:"vote"`
-		Rate   float32 `json:"rate"`
+		AgentName string  `json:"agent-name"`
+		Goal      string  `json:"goal"`
+		Action    string  `json:"action"`
+		Vote      string  `json:"vote"`
+		Rate      float32 `json:"rate"`
 	}
 
-	_ = os.MkdirAll("voter-training-data/", os.ModePerm)
+	_ = os.MkdirAll("../voter-training-data/", os.ModePerm)
 	data := voterTrainingDataRecord{
-		Goal:   goal,
-		Action: description,
-		Vote:   voteString,
-		Rate:   rate,
+		AgentName: agentName,
+		Goal:      goal,
+		Action:    description,
+		Vote:      voteString,
+		Rate:      rate,
 	}
 
 	jsonBytes, err := json.Marshal(data)
@@ -175,5 +182,5 @@ func exportVoterTrainingData(goal string, description string, voteString string,
 		return
 	}
 
-	_ = os.WriteFile(fmt.Sprintf("voter-training-data/%s.json", engines.GenerateMessageId(goal+description+voteString)), jsonBytes, os.ModePerm)
+	_ = os.WriteFile(fmt.Sprintf("../voter-training-data/%s.json", engines.GenerateMessageId(goal+description+voteString)), jsonBytes, os.ModePerm)
 }

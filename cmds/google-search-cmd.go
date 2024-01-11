@@ -63,8 +63,9 @@ func processGoogleSearch(gsr *GoogleSearchRequest, ctx *server.Context) (*Google
 		} else {
 			// mark cache hit...!
 			searchesBatcher := batcher.NewBatcher("search-cache-hits-batcher", func(ids []int64) error {
-				_, err := ctx.Storage.Db.Exec("make-search-cache-hits", ids)
-				return err
+				//_, err := ctx.Storage.Db.Exec("make-search-cache-hits", ids)
+				//return err
+				return nil
 			}, 256, 500*time.Millisecond)
 
 			ctx.Log.Trace().Msgf("google-search-hit [%d](fg:cyan,mod:bold): [%s](fg:green,mod:bold)", selectedCacheResult.Id, gsr.Keywords)

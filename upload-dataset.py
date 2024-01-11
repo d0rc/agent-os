@@ -29,5 +29,5 @@ transformed_data = transform_to_dict_of_lists(data)
 dataset = Dataset.from_dict(transformed_data)
 
 # Push dataset to your Hugging Face account (replace 'your_dataset_name' with your desired dataset name)
-dataset.push_to_hub('onealeph0cc/voting-agents-dataset-1')
+dataset.push_to_hub('onealeph0cc/voting-agents-dataset-2')
 

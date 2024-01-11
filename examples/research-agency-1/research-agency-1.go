@@ -63,7 +63,7 @@ func main() {
 	finalReportsSink := make(chan string)
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
-	go agentState.ToTPipeline()
+	//go agentState.ToTPipeline()
 
 	go func() {
 		reports := make([]string, 0)
@@ -150,11 +150,15 @@ func main() {
 						//wg.Add(1)
 						//go compareReports(idxA, idxB, reportA, reportB)
 						//go compareReports(idxB, idxA, reportB, reportA)
-						if againCounter == 1 {
+						/*if againCounter == 1 {
 							updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
 							if updatedReport != "" {
 								newFinalReports = append(newFinalReports, updatedReport)
 							}
+						}*/
+						updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
+						if updatedReport != "" {
+							newFinalReports = append(newFinalReports, updatedReport)
 						}
 					}(idxA, idxB, reportA, reportB)
 				}
@@ -371,7 +375,7 @@ Report A:
 Report B:
 %s
 
-### User: Summarize reports A and B into a single summary in markdown format:
+### User: Summarize reports A and B into a single summary, mention any contradictions you find, use markdown format:
 
 ### Assistant:
 %s`,
