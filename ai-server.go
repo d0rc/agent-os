@@ -39,6 +39,10 @@ func main() {
 		LogChan:     logChan,
 	})
 
+	if err != nil {
+		log.Fatalf("failed to create context: %v", err)
+	}
+
 	go ctx.Start(func(ctx *server.Context) {
 		ctx.LaunchWorker("background{embeddings}", process_embeddings.BackgroundEmbeddingsWorker)
 	})
