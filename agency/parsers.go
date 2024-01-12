@@ -258,23 +258,25 @@ func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
 		}
 	}
 	newInnerMap := make([]MapKV, 0)
-	for _, el := range innerMap {
-		if _, ok := el.Value.(string); ok {
-			parsedValue, ok := parsed.(map[string]interface{})[el.Key].(string)
+	if parsedMap, ok := parsed.(map[string]interface{}); ok {
+		for _, el := range innerMap {
+			if _, ok := el.Value.(string); ok {
+				parsedValue, ok := parsedMap[el.Key].(string)
+				if ok {
+					newInnerMap = append(newInnerMap, MapKV{
+						Key:   el.Key,
+						Value: parsedValue,
+					})
+				}
+				continue
+			}
+			innerMapValue, ok := parsed.(map[string]interface{})[el.Key]
 			if ok {
 				newInnerMap = append(newInnerMap, MapKV{
-					Key:   el.Key,
-					Value: parsedValue,
+					Key:      el.Key,
+					InnerMap: getUpdatedInnerMap(el.InnerMap, innerMapValue),
 				})
 			}
-			continue
-		}
-		innerMapValue, ok := parsed.(map[string]interface{})[el.Key]
-		if ok {
-			newInnerMap = append(newInnerMap, MapKV{
-				Key:      el.Key,
-				InnerMap: getUpdatedInnerMap(el.InnerMap, innerMapValue),
-			})
 		}
 	}
 	return newInnerMap
