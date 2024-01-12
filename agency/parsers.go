@@ -3,6 +3,7 @@ package agency
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/d0rc/agent-os/tools"
 	"strings"
 
@@ -225,13 +226,14 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 				Value: parsedStructure[el.Key],
 			})
 			continue
-		}
-		if el.InnerMap != nil {
+		} else if el.InnerMap != nil {
 			collectedJsonStructure = append(collectedJsonStructure, MapKV{
 				Key:      el.Key,
 				InnerMap: getUpdatedInnerMap(el.InnerMap, parsedStructure[el.Key]),
 			})
 			continue
+		} else {
+			fmt.Println("error, don't know how to handle this type: ", reflect.TypeOf(el.Value))
 		}
 	}
 	//reconstructedParsedJson, _ := json.MarshalIndent(parsedStructure, "", "\t")
@@ -255,6 +257,8 @@ func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
 				})
 			}
 			return newInnerMap
+		} else {
+			fmt.Printf("don't know how to handle this type: %v\n", reflect.TypeOf(parsed))
 		}
 	}
 	newInnerMap := make([]MapKV, 0)
@@ -269,15 +273,17 @@ func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
 					})
 				}
 				continue
-			}
-			innerMapValue, ok := parsed.(map[string]interface{})[el.Key]
-			if ok {
+			} else if innerMapValue, ok := parsed.(map[string]interface{})[el.Key]; ok {
 				newInnerMap = append(newInnerMap, MapKV{
 					Key:      el.Key,
 					InnerMap: getUpdatedInnerMap(el.InnerMap, innerMapValue),
 				})
+			} else {
+				fmt.Printf("don't know how to handle this type: %v\n", reflect.TypeOf(el.Value))
 			}
 		}
+	} else {
+		fmt.Printf("don't know how to handle this type: %v\n", reflect.TypeOf(parsed))
 	}
 	return newInnerMap
 }
