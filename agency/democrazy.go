@@ -83,14 +83,24 @@ retryVoting:
 		if choice == "" {
 			continue
 		}
-		var value string
+		var rateValue, thoughtsValue, criticismValue, feedbackValue string
 		var parsedVoteString string
 		if err := tools.ParseJSON(choice, func(s string) error {
-			value = gjson.Get(choice, "rate").String()
+			rateValue = gjson.Get(choice, "rate").String()
+			thoughtsValue = gjson.Get(choice, "thought").String()
+			criticismValue = gjson.Get(choice, "criticism").String()
+			feedbackValue = gjson.Get(choice, "feedback").String()
 
-			if value == "" {
-				return fmt.Errorf("not value parsed")
+			if rateValue == "" {
+				return fmt.Errorf("no rateValue parsed")
 			} else {
+				reconstructedBytes, _ := json.Marshal(&votersResponse{
+					Thought:   thoughtsValue,
+					Criticism: criticismValue,
+					Feedback:  feedbackValue,
+					Rate:      rateValue,
+				})
+				parsedVoteString = string(reconstructedBytes)
 				return nil
 			}
 		}); err != nil {
@@ -98,7 +108,7 @@ retryVoting:
 			continue
 		}
 		var currentVoteRate float32
-		tmp, err := strconv.ParseFloat(value, 32)
+		tmp, err := strconv.ParseFloat(rateValue, 32)
 		if err != nil {
 			fmt.Printf("error parsing vote rate: %s\n", err)
 			continue
