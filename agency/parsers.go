@@ -241,6 +241,9 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 }
 
 func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
+	if parsed == nil {
+		return nil
+	}
 	if len(innerMap) == 0 {
 		// we're at the bottom
 		if parsedMap, ok := parsed.(map[string]interface{}); ok {
