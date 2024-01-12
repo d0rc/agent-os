@@ -44,7 +44,7 @@ type GeneralAgentInfo struct {
 	historyUpdated     chan struct{}
 }
 
-func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
+func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, string, error) {
 	return agentState.Settings.ParseResponse(response)
 }
 

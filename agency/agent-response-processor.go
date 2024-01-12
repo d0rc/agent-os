@@ -16,13 +16,13 @@ import (
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for resIdx, res := range results {
-		parsedResults, parsedString, err := agentState.ParseResponse(res.Content)
+		parsedResults, parsedString, reconstructedParsedJson, err := agentState.ParseResponse(res.Content)
 		if err != nil {
 			continue
 		}
 
 		// let's go to cross roads here, to see if we should dive deeper here
-		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), parsedString)
+		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), reconstructedParsedJson)
 		if err != nil {
 			fmt.Printf("Error voting for action: %v\n", err)
 			continue

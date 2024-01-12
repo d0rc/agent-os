@@ -7,9 +7,10 @@ import (
 )
 
 type responseFormatJsonContext struct {
-	parsingStarted   bool
-	processingFailed bool
-	finalJson        []string
+	parsingStarted     bool
+	processingFailed   bool
+	finalJson          []string
+	finalJsonStructure [][]MapKV
 }
 
 func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
@@ -34,6 +35,7 @@ func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
 							jsonString := renderJsonString(responseStructure, &strings.Builder{}, 0)
 							//fmt.Printf("responseStructure: %v\n", jsonString)
 							ctx.finalJson = append(ctx.finalJson, jsonString)
+							ctx.finalJsonStructure = append(ctx.finalJsonStructure, responseStructure)
 							return
 						}
 						return

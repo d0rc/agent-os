@@ -18,12 +18,13 @@ type AgentSettings struct {
 
 type LifeCycleType string
 type GeneralAgentSettings struct {
-	Name            string                    `yaml:"name"`
-	InputSink       interface{}               `yaml:"input-sink"`
-	PromptBased     *PromptBasedAgentSettings `yaml:"prompt-based"`
-	LifeCycleType   LifeCycleType             `yaml:"life-cycle-type"`
-	LifeCycleLength int                       `yaml:"life-cycle-length"`
-	renderedJson    string
+	Name                  string                    `yaml:"name"`
+	InputSink             interface{}               `yaml:"input-sink"`
+	PromptBased           *PromptBasedAgentSettings `yaml:"prompt-based"`
+	LifeCycleType         LifeCycleType             `yaml:"life-cycle-type"`
+	LifeCycleLength       int                       `yaml:"life-cycle-length"`
+	renderedJson          string
+	renderedJsonStructure []MapKV
 }
 
 type ResponseFormatType map[string]interface{}
@@ -66,7 +67,7 @@ func ParseAgency(data []byte) ([]*AgentSettings, error) {
 		return nil, err
 	}
 
-	_, responseJson, err := ParseYAML(data)
+	_, responseJson, responseJsonStructure, err := ParseYAML(data)
 	//fmt.Printf("res: %v\n", res)
 	//fmt.Printf("responseJson: %v\n", responseJson)
 
@@ -78,6 +79,7 @@ func ParseAgency(data []byte) ([]*AgentSettings, error) {
 	// save json renderings in settings
 	for idx, setting := range settings {
 		setting.Agent.renderedJson = responseJson[idx]
+		setting.Agent.renderedJsonStructure = responseJsonStructure[idx]
 	}
 	return settings, nil
 }
@@ -88,25 +90,26 @@ type Node struct {
 	Parent string
 }
 
-func ParseYAML(data []byte) ([]Node, []string, error) {
+func ParseYAML(data []byte) ([]Node, []string, [][]MapKV, error) {
 	var nodes []Node
 
 	decoder := yaml.NewDecoder(io.Reader(bytes.NewReader(data)))
 	var node yaml.Node
 	if err := decoder.Decode(&node); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// ok, so let's dive into the yaml AST
 	// until we find the response-format node
 
 	ctx := &responseFormatJsonContext{
-		parsingStarted:   false,
-		processingFailed: false,
-		finalJson:        make([]string, 0),
+		parsingStarted:     false,
+		processingFailed:   false,
+		finalJson:          make([]string, 0),
+		finalJsonStructure: make([][]MapKV, 0),
 	}
 	buildResponseFormatJson(&node, ctx)
 
-	return nodes, ctx.finalJson, nil
+	return nodes, ctx.finalJson, ctx.finalJsonStructure, nil
 }
 
 func (settings *AgentSettings) GetResponseJSONFormat() string {
@@ -138,7 +141,7 @@ func fixMap(data map[string]interface{}) {
 	}
 }
 
-func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
+func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParserResult, string, string, error) {
 	if strings.HasSuffix(response, "},\n\t}\n}") {
 		// replace suffix with "}\n}"
 		response = response[:len(response)-7]
@@ -157,7 +160,7 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		return json.Unmarshal([]byte(response), &parsedResponse)
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
 	parsedString = strings.TrimSpace(parsedString)
@@ -170,6 +173,7 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 	}
 	results := make([]*ResponseParserResult, 0)
 
+	parsedStructure := make(map[string]interface{})
 	// pick data according to configured parsers
 	for _, parser := range settings.Agent.PromptBased.ResponseParsers {
 		if _, ok := parser.ParserPath.(string); ok {
@@ -181,6 +185,7 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 					Path:   parser.ParserPath,
 					Parser: &parser,
 				})
+				parsedStructure[parser.ParserPath.(string)] = obj
 			}
 		}
 
@@ -212,5 +217,62 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		}
 	}
 
-	return results, parsedString, nil
+	collectedJsonStructure := make([]MapKV, 0)
+	for _, el := range settings.Agent.renderedJsonStructure {
+		if _, ok := el.Value.(string); ok {
+			collectedJsonStructure = append(collectedJsonStructure, MapKV{
+				Key:   el.Key,
+				Value: parsedStructure[el.Key],
+			})
+			continue
+		}
+		if el.InnerMap != nil {
+			collectedJsonStructure = append(collectedJsonStructure, MapKV{
+				Key:      el.Key,
+				InnerMap: getUpdatedInnerMap(el.InnerMap, parsedStructure[el.Key]),
+			})
+			continue
+		}
+	}
+	//reconstructedParsedJson, _ := json.MarshalIndent(parsedStructure, "", "\t")
+	reconstructedParsedJson := renderJsonString(collectedJsonStructure, &strings.Builder{}, 0)
+
+	return results, parsedString, reconstructedParsedJson, nil
+}
+
+func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
+	if len(innerMap) == 0 {
+		// we're at the bottom
+		if parsedMap, ok := parsed.(map[string]interface{}); ok {
+			newInnerMap := make([]MapKV, 0)
+			for k, v := range parsedMap {
+				newInnerMap = append(newInnerMap, MapKV{
+					Key:   k,
+					Value: v,
+				})
+			}
+			return newInnerMap
+		}
+	}
+	newInnerMap := make([]MapKV, 0)
+	for _, el := range innerMap {
+		if _, ok := el.Value.(string); ok {
+			parsedValue, ok := parsed.(map[string]interface{})[el.Key].(string)
+			if ok {
+				newInnerMap = append(newInnerMap, MapKV{
+					Key:   el.Key,
+					Value: parsedValue,
+				})
+			}
+			continue
+		}
+		innerMapValue, ok := parsed.(map[string]interface{})[el.Key]
+		if ok {
+			newInnerMap = append(newInnerMap, MapKV{
+				Key:      el.Key,
+				InnerMap: getUpdatedInnerMap(el.InnerMap, innerMapValue),
+			})
+		}
+	}
+	return newInnerMap
 }
