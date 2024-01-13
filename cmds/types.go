@@ -109,6 +109,8 @@ type ClientRequest struct {
 	GetCacheRecords       []GetCacheRecord          `json:"get-cache-records"`
 	SetCacheRecords       []SetCacheRecord          `json:"set-cache-records"`
 	WriteMessagesTrace    []*engines.Message        `json:"write-messages-trace"`
+
+	UIRequest *UIRequest `json:"ui-request"`
 }
 
 type ServerResponse struct {
@@ -120,4 +122,6 @@ type ServerResponse struct {
 	SetCacheRecords       []*SetCacheRecordResponse `json:"set-cache-records"`
 	CorrelationId         string                    `json:"correlation-id"`
 	SpecialCaseResponse   string                    `json:"special-case-response"`
+
+	UIResponse *UIResponse `json:"ui-response"`
 }

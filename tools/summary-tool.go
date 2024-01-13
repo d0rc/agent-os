@@ -33,6 +33,8 @@ func DocumentReduceGetCached(document, question string, ctx *server.Context) (st
 var totalReductions uint64 = 0
 var failedReductions uint64 = 0
 
+var maxReduceThreads = make(chan struct{}, 1)
+
 func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.AgentOSClient, parser func(string) (string, error), model string) string {
 	if len(document) == 0 {
 		return ""
@@ -43,6 +45,11 @@ func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.A
 	if err == nil && cachedResult != nil && len(cachedResult) > 10 {
 		return string(cachedResult)
 	}
+
+	maxReduceThreads <- struct{}{}
+	defer func() {
+		<-maxReduceThreads
+	}()
 
 	ts := time.Now()
 	systemPrompt := fmt.Sprintf(`You are an AI that seeks to answer the following question:\n%s`, question)
