@@ -407,10 +407,11 @@ retryUpdatedReport:
 	contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
 	contentCheck = strings.ReplaceAll(contentCheck, "\r", "")
 	contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
+	lowerCasedReport := strings.ToLower(updatedReport)
 	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 &&
-		!strings.Contains(updatedReport, "Report A") &&
-		!strings.Contains(updatedReport, "Report B") &&
-		!strings.Contains(updatedReport, "Reports A") {
+		!strings.Contains(lowerCasedReport, "report a") &&
+		!strings.Contains(lowerCasedReport, "report b") &&
+		!strings.Contains(lowerCasedReport, "reports a") {
 		ratings := make(map[string]int)
 		reportsList := append([]string{}, a, b, updatedReport)
 		updatedReportId := engines.GenerateMessageId(updatedReport)
