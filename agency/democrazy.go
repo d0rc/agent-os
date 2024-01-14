@@ -92,6 +92,16 @@ retryVoting:
 			feedbackValue = gjson.Get(choice, "feedback").String()
 
 			if rateValue == "" {
+				testFmt := "\"rate\": \"%d\""
+				for i := 0; i <= 5; i++ {
+					if strings.Contains(choice, fmt.Sprintf(testFmt, i)) {
+						rateValue = strconv.Itoa(i)
+						break
+					}
+				}
+			}
+
+			if rateValue == "" {
 				return fmt.Errorf("no rateValue parsed: ```\n%s\n```", choice)
 			} else {
 				reconstructedBytes, _ := json.Marshal(&votersResponse{
