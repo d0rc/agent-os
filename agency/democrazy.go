@@ -92,10 +92,18 @@ retryVoting:
 			feedbackValue = gjson.Get(choice, "feedback").String()
 
 			if rateValue == "" {
-				testFmt := "\"rate\": \"%d\""
+				testFmt := []string{"\"rate\": \"%d\"", "\"rate\": %d"}
 				for i := 0; i <= 5; i++ {
-					if strings.Contains(choice, fmt.Sprintf(testFmt, i)) {
-						rateValue = strconv.Itoa(i)
+					found := false
+					for _, test := range testFmt {
+						if strings.Contains(choice, fmt.Sprintf(test, i)) {
+							rateValue = strconv.Itoa(i)
+							found = true
+							break
+						}
+					}
+
+					if found {
 						break
 					}
 				}
