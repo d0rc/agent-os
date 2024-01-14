@@ -6,6 +6,7 @@ import (
 	"github.com/d0rc/agent-os/tools"
 	"strings"
 	"sync"
+	"time"
 )
 
 type MessageID string
@@ -20,6 +21,7 @@ type SemanticSpace struct {
 	messages         map[MessageID]*engines.Message
 	growthFactor     int
 	nPendingRequests int
+	waiters          []chan struct{}
 }
 
 func NewSemanticSpace(growthFactor int) *SemanticSpace {
@@ -31,6 +33,7 @@ func NewSemanticSpace(growthFactor int) *SemanticSpace {
 		nPendingRequests: 0,
 		growthFactor:     growthFactor,
 		messages:         make(map[MessageID]*engines.Message),
+		waiters:          make([]chan struct{}, 0),
 	}
 }
 
@@ -66,10 +69,29 @@ func (space *SemanticSpace) CancelPendingRequest(trajectoryID TrajectoryID) {
 		// drop first element from pendingReqs
 		space.pendingRequests[trajectoryID]--
 		space.nPendingRequests--
+
+		for _, waiter := range space.waiters {
+			waiter <- struct{}{}
+		}
+		space.waiters = make([]chan struct{}, 0)
 	} else {
 		// fmt.Printf("can't find a request to close")
 	}
+
 	space.lock.Unlock()
+}
+
+func (space *SemanticSpace) Wait() {
+	space.lock.Lock()
+	if space.nPendingRequests > 0 {
+		waitChan := make(chan struct{}, 1)
+		space.waiters = append(space.waiters, waitChan)
+		space.lock.Unlock()
+		<-waitChan
+	} else {
+		space.lock.Unlock()
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 func (space *SemanticSpace) AddMessage(trajectoryId *TrajectoryID, message *engines.Message) error {

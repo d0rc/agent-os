@@ -4,7 +4,6 @@ import (
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
 	message_store "github.com/d0rc/agent-os/message-store"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) SoTPipeline() {
@@ -19,7 +18,7 @@ func (agentState *GeneralAgentInfo) SoTPipeline() {
 	for {
 		requests := semanticSpace.GetComputeRequests(1, 1)
 		if len(requests) == 0 {
-			time.Sleep(5000 * time.Millisecond)
+			agentState.space.Wait()
 			continue
 		}
 
