@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	message_store "github.com/d0rc/agent-os/message-store"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/logrusorgru/aurora"
 	"net/url"
@@ -18,6 +19,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 	for resIdx, res := range results {
 		parsedResults, parsedString, reconstructedParsedJson, err := agentState.ParseResponse(res.Content)
 		if err != nil {
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 
@@ -25,10 +27,12 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), reconstructedParsedJson)
 		if err != nil {
 			fmt.Printf("Error voting for action: %v\n", err)
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 		if voteRating < MinimalVotingRatingForCommand {
 			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 
@@ -42,12 +46,17 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			Content:  parsedString,
 		}
 		agentState.historyAppenderChannel <- correctedMessage
+		// get trajectoryId to which observations will go now...!
+		sourceTrajectoryId := message_store.TrajectoryID(keys(correctedMessage.ReplyTo)[0])
+		responseTrajectoryId, err := agentState.space.GetNextTrajectoryID(sourceTrajectoryId,
+			message_store.MessageID(msgId))
 
 		reactiveResultSink := func(msgId, content string) {
 			reactiveResponseId := engines.GenerateMessageId(content)
 			reactiveResponse := &engines.Message{
-				ID:       &reactiveResponseId,
-				ReplyTo:  map[string]struct{}{*correctedMessage.ID: {}},
+				ID: &reactiveResponseId,
+				//ReplyTo:  map[string]struct{}{*correctedMessage.ID: {}},
+				ReplyTo:  map[string]struct{}{string(responseTrajectoryId): {}},
 				MetaInfo: res.MetaInfo,
 				Role:     engines.ChatRoleUser,
 				Content:  content,
@@ -74,7 +83,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
 							agentState.getServerCommand(
-								*correctedMessage.ID,
+								string(responseTrajectoryId),
 								commandName,
 								argsData,
 								reactiveResultSink)...)
@@ -92,7 +101,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
 								agentState.getServerCommand(
-									*correctedMessage.ID,
+									string(responseTrajectoryId),
 									commandName,
 									argsData,
 									reactiveResultSink)...)

@@ -2,6 +2,7 @@ package agency
 
 import (
 	"fmt"
+	message_store "github.com/d0rc/agent-os/message-store"
 	"strings"
 	"sync"
 	"time"
@@ -45,6 +46,8 @@ type GeneralAgentInfo struct {
 
 	waitLock          sync.Mutex
 	waitingResponseTo map[string]int
+
+	space *message_store.SemanticSpace
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, string, error) {
@@ -90,6 +93,8 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 
 		waitLock:          sync.Mutex{},
 		waitingResponseTo: make(map[string]int),
+
+		space: message_store.NewSemanticSpace(3),
 	}
 
 	// copy all input variables from the config

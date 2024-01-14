@@ -1,103 +1,154 @@
 package message_store
 
 import (
+	"fmt"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/d0rc/agent-os/tools"
 	"strings"
 	"sync"
 )
 
-type NodeID string
-type TrajectorySignature string
-
-type SemanticTrajectory []NodeID
-
-type SemanticNode struct {
-	ID                      NodeID
-	IncomingContexts        map[TrajectorySignature]SemanticTrajectory // the ways this node gets created....!
-	IncomingContextsWeights map[TrajectorySignature]uint64
-	ResultingNodes          map[TrajectorySignature]map[NodeID]uint64
-	Lock                    sync.RWMutex
-}
+type MessageID string
+type Trajectory []MessageID
+type TrajectoryID string
 
 type SemanticSpace struct {
-	nodes     map[NodeID]*SemanticNode
-	nodesLock sync.RWMutex
+	trajectories     map[TrajectoryID]*Trajectory
+	lock             sync.RWMutex
+	newRequests      []*Trajectory
+	pendingRequests  map[TrajectoryID]uint64
+	messages         map[MessageID]*engines.Message
+	growthFactor     int
+	nPendingRequests int
 }
 
-func NewSemanticSpace() *SemanticSpace {
+func NewSemanticSpace(growthFactor int) *SemanticSpace {
 	return &SemanticSpace{
-		nodes:     make(map[NodeID]*SemanticNode),
-		nodesLock: sync.RWMutex{},
+		trajectories:     make(map[TrajectoryID]*Trajectory),
+		lock:             sync.RWMutex{},
+		newRequests:      make([]*Trajectory, 0),
+		pendingRequests:  make(map[TrajectoryID]uint64),
+		nPendingRequests: 0,
+		growthFactor:     growthFactor,
+		messages:         make(map[MessageID]*engines.Message),
 	}
 }
 
-// AddMessage - to add a new message we have to pass
-// both message and the path to it
-func (space *SemanticSpace) AddMessage(path []string, message *engines.Message) {
-	nodeId := NodeID(*message.ID)
-	space.nodesLock.RLock()
-	node, exists := space.nodes[nodeId]
-	space.nodesLock.RUnlock()
-	if !exists {
-		space.nodesLock.Lock()
-		node, exists = space.nodes[nodeId]
-		if !exists {
-			node = &SemanticNode{
-				ID:                      nodeId,
-				IncomingContexts:        make(map[TrajectorySignature]SemanticTrajectory),
-				IncomingContextsWeights: make(map[TrajectorySignature]uint64),
-				ResultingNodes:          make(map[TrajectorySignature]map[NodeID]uint64),
-				Lock:                    sync.RWMutex{},
-			}
-			space.nodes[nodeId] = node
-		}
-		space.nodesLock.Unlock()
+func (space *SemanticSpace) GetComputeRequests(maxRequests, maxPendingRequests int) []*Trajectory {
+	if space.nPendingRequests >= maxPendingRequests {
+		return nil
 	}
 
-	space.nodesLock.RLock()
-	node = space.nodes[nodeId]
-	space.nodesLock.RUnlock()
+	result := make([]*Trajectory, 0, maxRequests)
+	space.lock.Lock()
 
-	trajectory := ToTrajectory(path)
-	trajectorySignature := GetTrajectorySignature(trajectory)
-
-	node.Lock.Lock()
-	node.IncomingContexts[trajectorySignature] = trajectory
-	node.IncomingContextsWeights[trajectorySignature]++
-	node.Lock.Unlock()
-
-	parentNodeId := NodeID(path[len(path)-1])
-	parentNodeTrajectorySignature := GetTrajectorySignature(ToTrajectory(path[:len(path)-1]))
-
-	space.nodesLock.Lock()
-	parentNode, exists := space.nodes[parentNodeId]
-	space.nodesLock.Unlock()
-
-	if exists {
-		parentNode.Lock.Lock()
-		if _, exists := parentNode.ResultingNodes[parentNodeTrajectorySignature]; !exists {
-			parentNode.ResultingNodes[parentNodeTrajectorySignature] = make(map[NodeID]uint64)
-		}
-		parentNode.ResultingNodes[parentNodeTrajectorySignature][node.ID]++
-		parentNode.Lock.Unlock()
+	// let's take first maxRequests from newRequests
+	// removing them from newRequests
+	for i := 0; i < maxRequests && len(space.newRequests) > 0; i++ {
+		result = append(result, space.newRequests[0])
+		space.newRequests = space.newRequests[1:]
 	}
-}
 
-func GetTrajectorySignature(trajectory SemanticTrajectory) TrajectorySignature {
-	// join all strings
-	builder := strings.Builder{}
-	for _, el := range trajectory {
-		builder.WriteString(string(el))
-		builder.WriteString(",")
+	for _, trajectory := range result {
+		space.pendingRequests[GenerateTrajectoryID(*trajectory)]++
+		space.nPendingRequests++
 	}
-	return TrajectorySignature(engines.GenerateMessageId(builder.String()))
-}
-
-func ToTrajectory(path []string) SemanticTrajectory {
-	result := make(SemanticTrajectory, len(path))
-	for idx, segment := range path {
-		result[idx] = NodeID(segment)
-	}
+	space.lock.Unlock()
 
 	return result
+
+}
+
+func (space *SemanticSpace) CancelPendingRequest(trajectoryID TrajectoryID) {
+	space.lock.Lock()
+	pendingReqs, exists := space.pendingRequests[trajectoryID]
+	if exists && pendingReqs > 0 {
+		// drop first element from pendingReqs
+		space.pendingRequests[trajectoryID]--
+		space.nPendingRequests--
+	} else {
+		// fmt.Printf("can't find a request to close")
+	}
+	space.lock.Unlock()
+}
+
+func (space *SemanticSpace) AddMessage(trajectoryId *TrajectoryID, message *engines.Message) error {
+	space.lock.Lock()
+	space.messages[(MessageID)(*message.ID)] = message
+	space.lock.Unlock()
+
+	if trajectoryId == nil {
+		newTrajectory := Trajectory{MessageID(*message.ID)}
+		newTrajectoryId := GenerateTrajectoryID(newTrajectory)
+		space.lock.Lock()
+		space.trajectories[newTrajectoryId] = &newTrajectory
+		if message.Role == engines.ChatRoleSystem || message.Role == engines.ChatRoleUser {
+			space.newRequests = append(space.newRequests, tools.Replicate(&newTrajectory, space.growthFactor)...)
+		}
+		space.lock.Unlock()
+		return nil
+	} else {
+		// since we have a trajectoryId, let's check if it exists
+		space.lock.RLock()
+		trajectory, exists := space.trajectories[*trajectoryId]
+		space.lock.RUnlock()
+		if !exists {
+			return fmt.Errorf("trajectory %s does not exist", *trajectoryId)
+		}
+
+		// if we got here - chances, some pending requests have been fulfilled
+		// let's try to guess which one
+		if message.Role == engines.ChatRoleAssistant {
+			space.CancelPendingRequest(*trajectoryId)
+		}
+
+		// if we got here, we have a trajectoryId, let's add the message to it
+		space.lock.Lock()
+		newTrajectory := append(*trajectory, MessageID(*message.ID))
+		newTrajectoryId := GenerateTrajectoryID(newTrajectory)
+		_, exists = space.trajectories[newTrajectoryId]
+		if !exists {
+			space.trajectories[newTrajectoryId] = &newTrajectory
+			if message.Role == engines.ChatRoleSystem || message.Role == engines.ChatRoleUser {
+				space.newRequests = append(space.newRequests, tools.Replicate(&newTrajectory, space.growthFactor)...)
+			}
+		}
+		space.lock.Unlock()
+
+		return nil
+	}
+}
+
+func (space *SemanticSpace) TrajectoryToMessages(request *Trajectory) []*engines.Message {
+	result := make([]*engines.Message, 0, len(*request))
+	space.lock.RLock()
+	for _, id := range *request {
+		message := space.messages[id]
+		result = append(result, message)
+	}
+	space.lock.RUnlock()
+	return result
+}
+
+func GenerateTrajectoryID(trajectory Trajectory) TrajectoryID {
+	builder := strings.Builder{}
+	for _, messageID := range trajectory {
+		builder.Write([]byte(messageID))
+	}
+
+	return TrajectoryID(engines.GenerateMessageId(builder.String()))
+}
+
+func (space *SemanticSpace) GetNextTrajectoryID(sourceTrajectoryId TrajectoryID, direction MessageID) (TrajectoryID, error) {
+	space.lock.RLock()
+	trajectory, exists := space.trajectories[sourceTrajectoryId]
+	space.lock.RUnlock()
+	if !exists {
+		return "", fmt.Errorf("source trajectory %s does not exist", sourceTrajectoryId)
+	}
+
+	newTrajectory := append(*trajectory, direction)
+	newTrajectoryId := GenerateTrajectoryID(newTrajectory)
+
+	return newTrajectoryId, nil
 }

@@ -33,7 +33,7 @@ func DocumentReduceGetCached(document, question string, ctx *server.Context) (st
 var totalReductions uint64 = 0
 var failedReductions uint64 = 0
 
-var maxReduceThreads = make(chan struct{}, 1)
+var maxReduceThreads = make(chan struct{}, 12)
 
 func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.AgentOSClient, parser func(string) (string, error), model string) string {
 	if len(document) == 0 {
