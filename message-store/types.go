@@ -174,3 +174,7 @@ func (space *SemanticSpace) GetNextTrajectoryID(sourceTrajectoryId TrajectoryID,
 
 	return newTrajectoryId, nil
 }
+
+func (space *SemanticSpace) GetGrowthFactor() int {
+	return space.growthFactor
+}

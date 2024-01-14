@@ -31,7 +31,7 @@ func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPe
 				GetCompletionRequests: []cmds.GetCompletionRequest{
 					{
 						RawPrompt:   chatToRawPrompt(semanticSpace.TrajectoryToMessages(request)),
-						MinResults:  1,
+						MinResults:  agentState.space.GetGrowthFactor(),
 						Temperature: 0.9,
 					},
 				},
