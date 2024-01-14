@@ -92,7 +92,7 @@ retryVoting:
 			feedbackValue = gjson.Get(choice, "feedback").String()
 
 			if rateValue == "" {
-				testFmt := []string{"\"rate\": \"%d\"", "\"rate\": %d"}
+				testFmt := []string{"\"rate\": \"%d\"", "\"rate\": %d", "\"rate\": \"%d.5\""}
 				for i := 0; i <= 5; i++ {
 					found := false
 					for _, test := range testFmt {
