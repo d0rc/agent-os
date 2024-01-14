@@ -92,7 +92,7 @@ retryVoting:
 			feedbackValue = gjson.Get(choice, "feedback").String()
 
 			if rateValue == "" {
-				return fmt.Errorf("no rateValue parsed")
+				return fmt.Errorf("no rateValue parsed: ```\n%s\n```", choice)
 			} else {
 				reconstructedBytes, _ := json.Marshal(&votersResponse{
 					Thought:   thoughtsValue,
