@@ -6,8 +6,8 @@ import (
 	message_store "github.com/d0rc/agent-os/message-store"
 )
 
-func (agentState *GeneralAgentInfo) SoTPipeline() {
-	semanticSpace := message_store.NewSemanticSpace(1)
+func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPendingRequests int) {
+	semanticSpace := message_store.NewSemanticSpace(growthFactor)
 	agentState.space = semanticSpace
 	systemMessage, err := agentState.getSystemMessage()
 	if err != nil {
@@ -16,7 +16,7 @@ func (agentState *GeneralAgentInfo) SoTPipeline() {
 
 	_ = semanticSpace.AddMessage(nil, systemMessage)
 	for {
-		requests := semanticSpace.GetComputeRequests(1, 1)
+		requests := semanticSpace.GetComputeRequests(maxRequests, maxPendingRequests)
 		if len(requests) == 0 {
 			agentState.space.Wait()
 			continue

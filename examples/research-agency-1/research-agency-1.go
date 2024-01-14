@@ -54,7 +54,7 @@ func main() {
 
 		newAgentState.FinalReportChannel = finalReportsStream
 		newAgentState.ForkCallback = spawningCallback
-		go newAgentState.SoTPipeline()
+		go newAgentState.SoTPipeline(1, 1, 1)
 
 		return finalReportsStream
 	}
@@ -64,7 +64,7 @@ func main() {
 	finalReportsStream := make(chan string, 1024)
 	agentState.FinalReportChannel = finalReportsSink
 	//go agentState.ToTPipeline()
-	go agentState.SoTPipeline()
+	go agentState.SoTPipeline(1, 10, 10)
 
 	go func() {
 		reports := make([]string, 0)
