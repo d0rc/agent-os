@@ -52,6 +52,10 @@ func (agentState *GeneralAgentInfo) visitTerminalMessage(messages []*engines.Mes
 		CorrelationId: *messages[len(messages)-1].ID,
 	}
 
+	agentState.waitLock.Lock()
+	agentState.waitingResponseTo[*messages[len(messages)-1].ID]++
+	agentState.waitLock.Unlock()
+
 	//exportMessageChain(agentState.SystemName, messages)
 
 	return true

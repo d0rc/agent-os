@@ -42,6 +42,9 @@ type GeneralAgentInfo struct {
 	jobsReceived       uint64
 	jobsFinished       uint64
 	historyUpdated     chan struct{}
+
+	waitLock          sync.Mutex
+	waitingResponseTo map[string]int
 }
 
 func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, string, error) {
@@ -78,6 +81,15 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		terminalsVisitsMap: make(map[string]int),
 		terminalsVotesMap:  make(map[string]float32),
 		terminalsLock:      sync.RWMutex{},
+
+		ForkCallback:       nil,
+		FinalReportChannel: nil,
+		jobsSubmittedTs:    time.Now(),
+		jobsReceived:       0,
+		jobsFinished:       0,
+
+		waitLock:          sync.Mutex{},
+		waitingResponseTo: make(map[string]int),
 	}
 
 	// copy all input variables from the config

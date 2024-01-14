@@ -95,6 +95,10 @@ func createTraverseContext(history []*engines.Message) *traverseContext {
 	var MessageMap = make(map[string]*engines.Message)
 	var RepliesMap = make(map[string][]*engines.Message)
 	for _, m := range history {
+		if m == nil {
+			continue
+		}
+
 		if m.ID != nil {
 			MessageMap[*m.ID] = m
 		}

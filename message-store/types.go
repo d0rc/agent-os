@@ -1,116 +1,103 @@
 package message_store
 
-import "github.com/d0rc/agent-os/engines"
-
-type MessageID uint64
-type MessageType uint8
-type ChainId []MessageID
-
-const (
-	MTSystem MessageType = iota
-	MTUser
-	MTAssistant
+import (
+	"github.com/d0rc/agent-os/engines"
+	"strings"
+	"sync"
 )
 
-type AgentProcessID string
+type NodeID string
+type TrajectorySignature string
 
-type ProcessingRequestID string
+type SemanticTrajectory []NodeID
 
-type VoteValue float32
-
-type StoredMessage struct {
-	ID                    MessageID
-	AgentID               AgentProcessID
-	Type                  MessageType
-	Content               string
-	RepliesTo             map[MessageID]struct{}
-	RepliedBy             map[MessageID]struct{}
-	RatedBy               map[MessageID]struct{}
-	RequestsPending       []ProcessingRequestID
-	ObservationsProcessed bool
-}
-
-type SerializedMessage struct {
-	ID                    MessageID
-	AgentID               AgentProcessID
-	Type                  MessageType
-	Content               string
-	RepliesTo             []MessageID
-	RepliedBy             []MessageID
-	RatedBy               []MessageID
-	RequestsPending       []ProcessingRequestID
-	RequestsAttempted     int
-	ObservationsProcessed bool
+type SemanticNode struct {
+	ID                      NodeID
+	IncomingContexts        map[TrajectorySignature]SemanticTrajectory // the ways this node gets created....!
+	IncomingContextsWeights map[TrajectorySignature]uint64
+	ResultingNodes          map[TrajectorySignature]map[NodeID]uint64
+	Lock                    sync.RWMutex
 }
 
 type SemanticSpace struct {
+	nodes     map[NodeID]*SemanticNode
+	nodesLock sync.RWMutex
 }
 
-func (ss *SemanticSpace) AddMessage(agent AgentProcessID, message *engines.Message) error {
-	//
-	// insert into messages (agentId, messageId, messageType, content) values (?, ?, ?, ?);
-	// insert into message_replies_to(agentId, messageId, replyToMessageId) values (?,?,?), (?, ?, ?), ....;
-	// insert into message_replied_by(agentId, messageId, replyByMessageId) values (?,?,?), (?,?,?),....;
-	// insert into message_rated_by(agentId, messageId, ratedByMessageId) values (?,?,?), (?,?,?),....;
-
-	return nil
+func NewSemanticSpace() *SemanticSpace {
+	return &SemanticSpace{
+		nodes:     make(map[NodeID]*SemanticNode),
+		nodesLock: sync.RWMutex{},
+	}
 }
 
-func (ss *SemanticSpace) GetMessage(agent AgentProcessID, id MessageID) (*SerializedMessage, error) {
+// AddMessage - to add a new message we have to pass
+// both message and the path to it
+func (space *SemanticSpace) AddMessage(path []string, message *engines.Message) {
+	nodeId := NodeID(*message.ID)
+	space.nodesLock.RLock()
+	node, exists := space.nodes[nodeId]
+	space.nodesLock.RUnlock()
+	if !exists {
+		space.nodesLock.Lock()
+		node, exists = space.nodes[nodeId]
+		if !exists {
+			node = &SemanticNode{
+				ID:                      nodeId,
+				IncomingContexts:        make(map[TrajectorySignature]SemanticTrajectory),
+				IncomingContextsWeights: make(map[TrajectorySignature]uint64),
+				ResultingNodes:          make(map[TrajectorySignature]map[NodeID]uint64),
+				Lock:                    sync.RWMutex{},
+			}
+			space.nodes[nodeId] = node
+		}
+		space.nodesLock.Unlock()
+	}
 
+	space.nodesLock.RLock()
+	node = space.nodes[nodeId]
+	space.nodesLock.RUnlock()
+
+	trajectory := ToTrajectory(path)
+	trajectorySignature := GetTrajectorySignature(trajectory)
+
+	node.Lock.Lock()
+	node.IncomingContexts[trajectorySignature] = trajectory
+	node.IncomingContextsWeights[trajectorySignature]++
+	node.Lock.Unlock()
+
+	parentNodeId := NodeID(path[len(path)-1])
+	parentNodeTrajectorySignature := GetTrajectorySignature(ToTrajectory(path[:len(path)-1]))
+
+	space.nodesLock.Lock()
+	parentNode, exists := space.nodes[parentNodeId]
+	space.nodesLock.Unlock()
+
+	if exists {
+		parentNode.Lock.Lock()
+		if _, exists := parentNode.ResultingNodes[parentNodeTrajectorySignature]; !exists {
+			parentNode.ResultingNodes[parentNodeTrajectorySignature] = make(map[NodeID]uint64)
+		}
+		parentNode.ResultingNodes[parentNodeTrajectorySignature][node.ID]++
+		parentNode.Lock.Unlock()
+	}
 }
 
-func (ss *SemanticSpace) GetUnobservedMessages(agent AgentProcessID) ([]*SerializedMessage, error) {
-
+func GetTrajectorySignature(trajectory SemanticTrajectory) TrajectorySignature {
+	// join all strings
+	builder := strings.Builder{}
+	for _, el := range trajectory {
+		builder.WriteString(string(el))
+		builder.WriteString(",")
+	}
+	return TrajectorySignature(engines.GenerateMessageId(builder.String()))
 }
 
-func (ss *SemanticSpace) GetMessagesToVote(agent AgentProcessID, minVotes int) ([]*SerializedMessage, error) {
+func ToTrajectory(path []string) SemanticTrajectory {
+	result := make(SemanticTrajectory, len(path))
+	for idx, segment := range path {
+		result[idx] = NodeID(segment)
+	}
 
-}
-
-func (ss *SemanticSpace) GetMessagesToVisit(agent AgentProcessID, minReplies int, minAttempts int, minVote VoteValue) ([]*SerializedMessage, error) {
-
-}
-
-// in order to be able to continue the inference process
-// we need to know for each message which hash no requests pending
-// and which as processed fully
-//
-// assistant messages: (with command to execute)
-// execute command, obtain observations, need an agent context here...!
-//
-// user messages:
-// second, we will need a way to fetch all messages that have no requests pending
-// and which have small enough `replied by`
-
-type JobType string
-
-const (
-	JT_EmbeddingsLLMEmbedder768 JobType = "llm-embedder-768"
-)
-
-type TasksRequest struct {
-	WorkerID       string    `json:"worker-id"`
-	CompatibleJobs []JobType `json:"compatible-jobs"`
-	MaxTasks       int       `json:"max-tasks"`
-}
-
-type TaskData struct {
-	TaskId  string `json:"task-id"`
-	ReqType string `json:"req-type"` // [query / key] == [request / document]
-	Task    string `json:"task"`     // qa, icl, chat, lrlm, tool, convsearch
-	Text    string `json:"text"`
-}
-
-type TasksResponse struct {
-	Tasks []*TaskData `json:"tasks"`
-}
-
-type TaskResult struct {
-	TaskId string    `json:"task-id"`
-	Vector []float32 `json:"vector"`
-}
-
-type TasksResultsResponse struct {
-	Results []*TaskResult `json:"results"`
+	return result
 }
