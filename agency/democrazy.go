@@ -79,7 +79,8 @@ retryVoting:
 	currentRating := float32(0)
 	listOfRatings := make([]float32, 0)
 	numberOfVotes := 0
-	for _, choice := range tools.FlattenChoices(serverResponse.GetCompletionResponse) {
+	allChoices := tools.FlattenChoices(serverResponse.GetCompletionResponse)
+	for _, choice := range allChoices {
 		if choice == "" {
 			continue
 		}
@@ -148,11 +149,11 @@ retryVoting:
 		listOfRatings = append(listOfRatings, currentVoteRate)
 	}
 
-	if minResults < len(serverResponse.GetCompletionResponse[0].Choices) {
-		minResults = len(serverResponse.GetCompletionResponse[0].Choices) + 1
+	if minResults < len(allChoices) {
+		minResults = len(allChoices) + 1
 	}
 
-	if numberOfVotes < MinimumNumberOfVotes && minResults < 50 {
+	if numberOfVotes < MinimumNumberOfVotes && minResults < 500 {
 		minResults += 5
 		goto retryVoting
 	}
