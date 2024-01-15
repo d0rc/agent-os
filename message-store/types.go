@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/tools"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,11 @@ func (space *SemanticSpace) GetComputeRequests(maxRequests, maxPendingRequests i
 
 	result := make([]*Trajectory, 0, maxRequests)
 	space.lock.Lock()
+
+	// sort space.newRequests
+	sort.Slice(space.newRequests, func(i, j int) bool {
+		return len(*space.newRequests[i]) < len(*space.newRequests[j])
+	})
 
 	// let's take first maxRequests from newRequests
 	// removing them from newRequests
