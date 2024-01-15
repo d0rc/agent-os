@@ -5,6 +5,7 @@ import (
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
 	"github.com/d0rc/agent-os/server"
+	"strings"
 )
 
 type UIRequest struct {
@@ -34,20 +35,20 @@ type UIGenSettings struct {
 }
 
 type UIGetMessage struct {
-	ChatID              string            `json:"agent-id"`
-	GenerationSettings  UIGenSettings     `json:"generation-settings"`
-	Messages            []engines.Message `json:"messages"`
-	InlineButton        *string           `json:"inline-button"`
-	DocumentCollections []string          `json:"rag-ids"`
-	MaxRequiredResults  int               `json:"max-required-results"`
-	NoCache             bool              `json:"no-cache"`
+	ChatID              string             `json:"agent-id"`
+	GenerationSettings  *UIGenSettings     `json:"generation-settings"`
+	Messages            []*engines.Message `json:"messages"`
+	InlineButton        *string            `json:"inline-button"`
+	DocumentCollections []string           `json:"rag-ids"`
+	MaxRequiredResults  int                `json:"max-required-results"`
+	NoCache             bool               `json:"no-cache"`
 }
 
 type UIGetMessageResponse struct {
-	Message        engines.Message `json:"message"`
-	VisibleMessage string          `json:"visible-message"`
-	InlineButtons  []string        `json:"inline-buttons"`
-	Error          string          `json:"error"`
+	Choices        []engines.Message `json:"choices"`
+	VisibleMessage []string          `json:"visible-message"`
+	InlineButtons  [][]string        `json:"inline-buttons"`
+	Error          string            `json:"error"`
 }
 
 type UIUploadDocument struct {
@@ -79,7 +80,7 @@ type UIDeleteDocumentResponse struct {
 	Error string `json:"error"`
 }
 
-func ProcessUIRequest(request []UIRequest, ctx *server.Context) (*ServerResponse, error) {
+func ProcessUIRequest(uiReq *UIRequest, ctx *server.Context) (*ServerResponse, error) {
 	result := &UIResponse{
 		UIGetMessagesResponse:     make([]UIGetMessageResponse, 0),
 		UIUploadDocumentsResponse: make([]UIUploadDocumentResponse, 0),
@@ -87,34 +88,32 @@ func ProcessUIRequest(request []UIRequest, ctx *server.Context) (*ServerResponse
 		UIDeleteDocumentsResponse: make([]UIDeleteDocumentResponse, 0),
 	}
 
-	for _, uiReq := range request {
-		if uiReq.UIGetMessages != nil && len(uiReq.UIGetMessages) > 0 {
-			for _, uiGetMessage := range uiReq.UIGetMessages {
-				result.UIGetMessagesResponse = append(result.UIGetMessagesResponse, processUIGetMessage(
-					uiGetMessage,
-					ctx))
-			}
+	if uiReq.UIGetMessages != nil && len(uiReq.UIGetMessages) > 0 {
+		for _, uiGetMessage := range uiReq.UIGetMessages {
+			result.UIGetMessagesResponse = append(result.UIGetMessagesResponse, processUIGetMessage(
+				uiGetMessage,
+				ctx))
 		}
-		if uiReq.UIUploadDocuments != nil && len(uiReq.UIUploadDocuments) > 0 {
-			for _, uiUploadDocument := range uiReq.UIUploadDocuments {
-				result.UIUploadDocumentsResponse = append(result.UIUploadDocumentsResponse, ProcessUIUploadDocument(
-					uiUploadDocument,
-					ctx))
-			}
+	}
+	if uiReq.UIUploadDocuments != nil && len(uiReq.UIUploadDocuments) > 0 {
+		for _, uiUploadDocument := range uiReq.UIUploadDocuments {
+			result.UIUploadDocumentsResponse = append(result.UIUploadDocumentsResponse, ProcessUIUploadDocument(
+				uiUploadDocument,
+				ctx))
 		}
-		if uiReq.UITagDocuments != nil && len(uiReq.UITagDocuments) > 0 {
-			for _, uiTagDocument := range uiReq.UITagDocuments {
-				result.UITagDocumentsResponse = append(result.UITagDocumentsResponse, ProcessUITagDocument(
-					uiTagDocument,
-					ctx))
-			}
+	}
+	if uiReq.UITagDocuments != nil && len(uiReq.UITagDocuments) > 0 {
+		for _, uiTagDocument := range uiReq.UITagDocuments {
+			result.UITagDocumentsResponse = append(result.UITagDocumentsResponse, ProcessUITagDocument(
+				uiTagDocument,
+				ctx))
 		}
-		if uiReq.UIDeleteDocuments != nil && len(uiReq.UIDeleteDocuments) > 0 {
-			for _, uiDeleteDocument := range uiReq.UIDeleteDocuments {
-				result.UIDeleteDocumentsResponse = append(result.UIDeleteDocumentsResponse, ProcessUIDeleteDocument(
-					uiDeleteDocument,
-					ctx))
-			}
+	}
+	if uiReq.UIDeleteDocuments != nil && len(uiReq.UIDeleteDocuments) > 0 {
+		for _, uiDeleteDocument := range uiReq.UIDeleteDocuments {
+			result.UIDeleteDocumentsResponse = append(result.UIDeleteDocumentsResponse, ProcessUIDeleteDocument(
+				uiDeleteDocument,
+				ctx))
 		}
 	}
 
@@ -125,10 +124,12 @@ func ProcessUIRequest(request []UIRequest, ctx *server.Context) (*ServerResponse
 
 // processUIGetMessage - process single completion request
 func processUIGetMessage(uiGetMessage UIGetMessage, ctx *server.Context) UIGetMessageResponse {
+	uiGetMessage.Messages = preprocessMessages(uiGetMessage.Messages)
+
 	resp, err := processGetCompletion(
 		GetCompletionRequest{
 			Model:       uiGetMessage.GenerationSettings.Model,
-			RawPrompt:   "",
+			RawPrompt:   collectPrompt(uiGetMessage),
 			Temperature: uiGetMessage.GenerationSettings.Temperature,
 			StopTokens:  uiGetMessage.GenerationSettings.StopTokens,
 			MinResults:  uiGetMessage.MaxRequiredResults,
@@ -142,6 +143,8 @@ func processUIGetMessage(uiGetMessage UIGetMessage, ctx *server.Context) UIGetMe
 	}
 
 	messages := make([]engines.Message, len(resp.Choices))
+	visibleMessage := make([]string, len(resp.Choices))
+	inlineButtons := make([][]string, len(resp.Choices))
 	for i, choice := range resp.Choices {
 		id := engines.GenerateMessageId(choice)
 		messages[i] = engines.Message{
@@ -152,20 +155,51 @@ func processUIGetMessage(uiGetMessage UIGetMessage, ctx *server.Context) UIGetMe
 				*uiGetMessage.Messages[len(uiGetMessage.Messages)-1].ID: {},
 			},
 		}
+		visibleMessage[i] = choice
+		inlineButtons[i] = make([]string, 0)
 	}
 
 	return UIGetMessageResponse{
-		Message: engines.Message{
-			ID:       nil,
-			ReplyTo:  nil,
-			MetaInfo: nil,
-			Role:     "",
-			Content:  "",
-		},
-		VisibleMessage: "",
-		InlineButtons:  []string{},
-		Error:          fmt.Sprintf("Got internal error: %v", err),
+		Choices:        messages,
+		VisibleMessage: visibleMessage,
+		InlineButtons:  inlineButtons,
+		Error:          "",
 	}
+}
+
+func collectPrompt(info UIGetMessage) string {
+	return chatToRawPrompt(info.Messages)
+}
+
+func chatToRawPrompt(sample []*engines.Message) string {
+	// following well known ### Instruction ### Assistant ### User format
+	rawPrompt := strings.Builder{}
+	for _, message := range sample {
+		switch message.Role {
+		case engines.ChatRoleSystem:
+			rawPrompt.WriteString(fmt.Sprintf("### Instruction:\n%s\n", message.Content))
+		case engines.ChatRoleAssistant:
+			rawPrompt.WriteString(fmt.Sprintf("### Assistant:\n%s\n", message.Content))
+		case engines.ChatRoleUser:
+			rawPrompt.WriteString(fmt.Sprintf("### User:\n%s\n", message.Content))
+		}
+	}
+	rawPrompt.WriteString("### Assistant:\n")
+
+	return rawPrompt.String()
+}
+
+func preprocessMessages(data []*engines.Message) []*engines.Message {
+	result := make([]*engines.Message, len(data))
+	for i, message := range data {
+		if message.ID == nil {
+			id := engines.GenerateMessageId(message.Content)
+			message.ID = &id
+		}
+		result[i] = message
+	}
+
+	return result
 }
 
 // ProcessUIUploadDocument - process single upload document request

@@ -126,6 +126,10 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 		result, err = cmds.ProcessWriteMessagesTrace(request.ProcessName, request.WriteMessagesTrace, ctx, request.ProcessName)
 	}
 
+	if request.UIRequest != nil {
+		result, err = cmds.ProcessUIRequest(request.UIRequest, ctx)
+	}
+
 	if err != nil {
 		return nil, err
 	}
