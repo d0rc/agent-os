@@ -10,6 +10,7 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
+	"math/rand"
 	"os"
 	"strings"
 	"sync"
@@ -61,10 +62,10 @@ func main() {
 
 	agentState.ForkCallback = spawningCallback
 	finalReportsSink := make(chan string)
-	finalReportsStream := make(chan string, 1024)
+	finalReportsStream := make(chan string, 4096)
 	agentState.FinalReportChannel = finalReportsSink
 	//go agentState.ToTPipeline()
-	go agentState.SoTPipeline(1, 10, 10)
+	//go agentState.SoTPipeline(3, 20, 20)
 
 	go func() {
 		reports := make([]string, 0)
@@ -92,97 +93,159 @@ func main() {
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
 		}
-		for _, report := range storedReports {
+		for _, report := range removeDuplicates(storedReports) {
 			finalReportsStream <- report
 		}
 	}
 
 	finalReports := make([]string, 0)
-	finalReportsDeDupe := make(map[string]struct{})
 	for finalReport := range finalReportsStream {
 		finalReport = strings.TrimSpace(finalReport)
-		if _, ok := finalReportsDeDupe[finalReport]; ok {
-			continue
-		}
+		finalReports = removeDuplicates(append(finalReports, finalReport))
 
-		atomic.AddUint64(&reportsProcessed, 1)
-
-		againCounter := 0
-
-		fmt.Printf("Processing final report: %s\n", finalReport)
-		finalReportsDeDupe[finalReport] = struct{}{}
-		fmt.Println(finalReport)
-		finalReports = append(finalReports, finalReport)
-	again:
-		againCounter++
 		if len(finalReports) > 2 {
-			newFinalReports := make([]string, 0)
-			ratings := make(map[int]int)
-			wg := sync.WaitGroup{}
-			//lock := sync.RWMutex{}
-			agentGoal := agentState.InputVariables["goal"].(string)
-			for idxA, reportA := range finalReports {
-				for idxB, reportB := range finalReports {
-					if idxA == idxB {
-						continue
-					}
-					if reportA == reportB {
-						continue
-					}
+			//newFinalReports, ratings := naiveComparator(agentState, finalReports, client, againCounter)
 
-					wg.Add(1)
-					go func(idxA, idxB int, reportA, reportB string) {
-						defer wg.Done()
-						/*
-							compareReports := func(idxA, idxB int, reportA, reportB string) {
-								defer wg.Done()
-								yes, err := isReportABetter(client, agentGoal, reportA, reportB)
-								if err != nil {
-									return
-								}
-								if yes {
-									lock.Lock()
-									ratings[idxA]++
-									lock.Unlock()
-									//ratings[idxB]--
-								}
-							}*/
+			startingLength := len(finalReports)
+			for {
+				// we need to split finalReports into chunks of chunkSize
+				var chunks [][]string = make([][]string, 0)
+				chunkSize := 2
 
-						//wg.Add(1)
-						//go compareReports(idxA, idxB, reportA, reportB)
-						//go compareReports(idxB, idxA, reportB, reportA)
-						/*if againCounter == 1 {
-							updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
-							if updatedReport != "" {
-								newFinalReports = append(newFinalReports, updatedReport)
-							}
-						}*/
-						updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
-						if updatedReport != "" {
-							newFinalReports = append(newFinalReports, updatedReport)
-						}
-					}(idxA, idxB, reportA, reportB)
+				finalReports = shuffle(finalReports)
+				for i := 0; i < len(finalReports); i += chunkSize {
+					end := i + chunkSize
+					if end > len(finalReports) {
+						end = len(finalReports)
+					}
+					chunks = append(chunks, finalReports[i:end])
 				}
-			}
-			wg.Wait()
 
-			fmt.Printf("ratings: %v\n", ratings)
+				tools.AppendFile("hdr.log", fmt.Sprintf("Final reports: %d, chunks: %d, chunk size: %d\n",
+					len(finalReports),
+					len(chunks),
+					chunkSize))
 
-			// print reports from worth to best
-			printReports(ratings, finalReports, finalReportsStream)
-			// dropping all current reports, leaving only those which scored
+				chunksProcessingResults := make([]string, 0)
+				chunksProcessingResultsLock := sync.RWMutex{}
+				agentGoal := agentState.InputVariables["goal"].(string)
+				wg := sync.WaitGroup{}
+				for chunkIdx, chunkReports := range chunks {
+					if len(chunkReports) != 2 {
+						chunksProcessingResultsLock.Lock()
+						chunksProcessingResults = append(chunksProcessingResults, chunkReports...)
+						chunksProcessingResultsLock.Unlock()
+						continue
+					}
+					wg.Add(1)
+					go func(chunkIdx int, chunkReports []string, results *[]string, lock *sync.RWMutex) {
+						merged := generateUpdatedReport(client, agentGoal, chunkReports[0], chunkReports[1])
+						chunksProcessingResultsLock.Lock()
+						chunksProcessingResults = append(chunksProcessingResults, merged...)
+						chunksProcessingResultsLock.Unlock()
+						tools.AppendFile("hdr.log",
+							fmt.Sprintf("Processed chunk %d, output size is %d\n", chunkIdx, len(merged)))
+						wg.Done()
+					}(chunkIdx, chunkReports, &chunksProcessingResults, &chunksProcessingResultsLock)
+				}
+				wg.Wait()
 
-			for idx, _ := range ratings {
-				newFinalReports = append(newFinalReports, finalReports[idx])
-			}
-			finalReports = newFinalReports
-			if againCounter < 3 {
-				goto again
+				if len(chunksProcessingResults) > 0 {
+					finalReports = removeDuplicates(chunksProcessingResults)
+				} else {
+					tools.AppendFile("hdr.log", fmt.Sprintf("No results for chunks, output size is 0"))
+				}
+
+				newFinalReports, ratings := naiveComparator(agentState, finalReports, client, 0)
+				newFinalReports = removeDuplicates(newFinalReports)
+
+				tools.AppendFile("hdr.log", fmt.Sprintf("ratings: %v\n", ratings))
+
+				// print reports from worth to best
+				printReports(ratings, finalReports, finalReportsStream)
+				if len(newFinalReports) > 0 {
+					finalReports = newFinalReports
+				}
+				// dropping all current reports, leaving only those which scored
+
+				if len(finalReports) == startingLength {
+					break
+				}
+				startingLength = len(finalReports)
 			}
 		}
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(ts))
+}
+
+func shuffle(reports []string) []string {
+	//rand.Seed(time.Now().UnixNano())
+	for i := len(reports) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		reports[i], reports[j] = reports[j], reports[i]
+	}
+	return reports
+}
+
+func naiveComparator(agentState *agency.GeneralAgentInfo, finalReports []string, client *os_client.AgentOSClient, againCounter int) ([]string, map[int]int) {
+	newFinalReports := make([]string, 0)
+	ratings := make(map[int]int)
+	wg := sync.WaitGroup{}
+	lock := sync.RWMutex{}
+	agentGoal := agentState.InputVariables["goal"].(string)
+	for idxA, reportA := range finalReports {
+		for idxB, reportB := range finalReports {
+			if idxA == idxB {
+				continue
+			}
+			if reportA == reportB {
+				continue
+			}
+
+			wg.Add(1)
+			go func(idxA, idxB int, reportA, reportB string) {
+				defer wg.Done()
+
+				compareReports := func(idxA, idxB int, reportA, reportB string) {
+					defer wg.Done()
+					yes, err := isReportABetter(client, agentGoal, reportA, reportB)
+					if err != nil {
+						return
+					}
+					if yes {
+						lock.Lock()
+						ratings[idxA]++
+						lock.Unlock()
+						//ratings[idxB]--
+					}
+				}
+
+				wg.Add(2)
+				go compareReports(idxA, idxB, reportA, reportB)
+				go compareReports(idxB, idxA, reportB, reportA)
+				/*if againCounter == 1 {
+					updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
+					if updatedReport != "" {
+						newFinalReports = append(newFinalReports, updatedReport)
+					}
+				}*/
+				//updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
+				//if updatedReport != "" {
+				//	newFinalReports = append(newFinalReports, updatedReport)
+				//}
+			}(idxA, idxB, reportA, reportB)
+		}
+	}
+	wg.Wait()
+
+	for idx, v := range ratings {
+		if v > 0 {
+			newFinalReports = append(newFinalReports, finalReports[idx])
+		}
+	}
+
+	return newFinalReports, ratings
 }
 
 func printReports(ratings map[int]int, reports []string, reportsStream chan string) {
@@ -208,8 +271,9 @@ Best report, has score of %d:
 Least scored report, has score of %d:
 %s
 `, maxVal, codeblock(reports[maxIdx]), minVal, codeblock(reports[minIdx]))
-	info := fmt.Sprintf("Total reports: %d, reports selected: %d, queue len: %d\n",
+	info := fmt.Sprintf("Total reports: %d, reports selected: %d, final-reports-len: %d, queue len: %d\n",
 		atomic.LoadUint64(&reportsProcessed),
+		len(ratings),
 		len(reports),
 		len(reportsStream)) + sw
 	_ = os.WriteFile("reports-table.txt", []byte(info), 0644)
@@ -362,8 +426,8 @@ Current choice is (total errors = %d, parse error = %v):
 	return votesA > votesB, nil
 }
 
-func generateUpdatedReport(client *os_client.AgentOSClient, updatedReports chan string,
-	goal, a, b string) string {
+func generateUpdatedReport(client *os_client.AgentOSClient,
+	goal, a, b string) []string {
 	updatedReportQuery := fmt.Sprintf(`### Instruction:
 You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
 Primary goal:
@@ -436,17 +500,54 @@ retryUpdatedReport:
 			}
 		}
 
-		if ratings[updatedReportId] > 0 {
-			if updatedReport != "" && updatedReports != nil {
-				updatedReports <- updatedReport
-			}
+		// no let's pick to best and return those
+		var maxKey1, maxKey2 string
+		var maxValue1, maxValue2 int
 
-			return updatedReport
+		for key, value := range ratings {
+			if value > maxValue1 {
+				// Update second highest
+				maxValue2 = maxValue1
+				maxKey2 = maxKey1
+
+				// Update highest
+				maxValue1 = value
+				maxKey1 = key
+			} else if value > maxValue2 {
+				// Update second highest
+				maxValue2 = value
+				maxKey2 = key
+			}
 		}
-		// fmt.Printf("Got updated report: %s\n", aurora.BrightGreen(updatedReport))
+		// if any of maxKey1, or maxKey2 is empty, then we have no choice
+		// but to return a or b instead of empty strings
+		allOptions := []string{maxKey1, maxKey2, a, b}
+		// remove all empty strings
+		for i, option := range allOptions {
+			if option == "" {
+				allOptions = append(allOptions[:i], allOptions[i+1:]...)
+			}
+		}
+		// remove all duplicates
+		return removeDuplicates(allOptions)
+
 	}
 
-	return ""
+	return []string{a, b}
+}
+
+func removeDuplicates(options []string) []string {
+	results := make(map[string]struct{})
+	resultsSlice := make([]string, 0)
+	for _, option := range options {
+		option = strings.TrimSpace(option)
+		if _, ok := results[option]; !ok {
+			results[option] = struct{}{}
+			resultsSlice = append(resultsSlice, option)
+		}
+	}
+
+	return resultsSlice
 }
 
 func codeblock(s string) string {

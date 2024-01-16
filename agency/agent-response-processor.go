@@ -11,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
@@ -269,10 +268,10 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 			} else {
 				// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
 				tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + data.(string))
-				appendFile("say.log", data.(string))
+				tools.AppendFile("say.log", data.(string))
 			}
 		}
-	case "hire-agent":
+	case "hire-agentx":
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
@@ -293,7 +292,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 								content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
 									roleName, msg)
 								contentMessageId := engines.GenerateMessageId(content)
-								appendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
+								tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
 									roleName, taskDescription, msg))
 								agentState.historyAppenderChannel <- &engines.Message{
 									ID:      &contentMessageId,
@@ -384,33 +383,4 @@ func listAllNotes() string {
 		notesList += fmt.Sprintf("- %s\n", section)
 	}
 	return notesList
-}
-
-var filesMap map[string]struct{} = make(map[string]struct{})
-var filesMapLock sync.RWMutex = sync.RWMutex{}
-
-func appendFile(fname string, text string) {
-	filesMapLock.Lock()
-	defer filesMapLock.Unlock()
-	_, exists := filesMap[fname]
-	if !exists {
-		filesMap[fname] = struct{}{}
-		// rename current file if it exists
-		if _, err := os.Stat(fname); err == nil {
-			_ = os.Rename(fname, fmt.Sprintf("%s.%d.old", fname, time.Now().Unix()))
-		}
-	}
-	// append to log file fname, create it if it doesn't exist
-	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("failed opening file: %s\n", err)
-		return
-	}
-
-	defer f.Close()
-
-	if _, err := f.WriteString("--=== new report ===--\n" + text + "\n"); err != nil {
-		fmt.Printf("failed writing to file: %s\n", err)
-		return
-	}
 }
