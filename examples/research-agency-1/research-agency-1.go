@@ -93,7 +93,7 @@ func main() {
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
 		}
-		for _, report := range removeDuplicates(storedReports) {
+		for _, report := range tools.DropDuplicates(storedReports) {
 			finalReportsStream <- report
 		}
 	}
@@ -101,7 +101,7 @@ func main() {
 	finalReports := make([]string, 0)
 	for finalReport := range finalReportsStream {
 		finalReport = strings.TrimSpace(finalReport)
-		finalReports = removeDuplicates(append(finalReports, finalReport))
+		finalReports = tools.DropDuplicates(append(finalReports, finalReport))
 
 		if len(finalReports) > 2 {
 			//newFinalReports, ratings := naiveComparator(agentState, finalReports, client, againCounter)
@@ -151,13 +151,13 @@ func main() {
 				wg.Wait()
 
 				if len(chunksProcessingResults) > 0 {
-					finalReports = removeDuplicates(chunksProcessingResults)
+					finalReports = tools.DropDuplicates(chunksProcessingResults)
 				} else {
 					tools.AppendFile("hdr.log", fmt.Sprintf("No results for chunks, output size is 0"))
 				}
 
 				newFinalReports, ratings := naiveComparator(agentState, finalReports, client, 0)
-				newFinalReports = removeDuplicates(newFinalReports)
+				newFinalReports = tools.DropDuplicates(newFinalReports)
 
 				tools.AppendFile("hdr.log", fmt.Sprintf("ratings: %v\n", ratings))
 
@@ -529,25 +529,11 @@ retryUpdatedReport:
 			}
 		}
 		// remove all duplicates
-		return removeDuplicates(allOptions)
+		return tools.DropDuplicates(allOptions)
 
 	}
 
 	return []string{a, b}
-}
-
-func removeDuplicates(options []string) []string {
-	results := make(map[string]struct{})
-	resultsSlice := make([]string, 0)
-	for _, option := range options {
-		option = strings.TrimSpace(option)
-		if _, ok := results[option]; !ok {
-			results[option] = struct{}{}
-			resultsSlice = append(resultsSlice, option)
-		}
-	}
-
-	return resultsSlice
 }
 
 func codeblock(s string) string {
