@@ -24,6 +24,9 @@ func (cw ChannelWriter) Write(p []byte) (n int, err error) {
 var OutputChannel = make(chan string, 4096)
 
 func ConsoleInit(name string, termUi *bool) (zerolog.Logger, chan string) {
+	if termUi == nil {
+		termUi = flag.Bool("term-ui", false, "enable term-ui")
+	}
 	flag.Parse()
 	logsInit(termUi)
 
