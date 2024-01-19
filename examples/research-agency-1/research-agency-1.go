@@ -105,7 +105,7 @@ func main() {
 		}
 	}
 
-	maxHims := 32
+	maxHims := 10
 	outputChannel := make(chan string)
 	initialHim := &HIM{
 		Id:                       fmt.Sprintf("him%03d", 0),
@@ -303,7 +303,7 @@ Provide response in the following JSON format:
 		ReportsAreEqual string `json:"reports-are-equal"`
 	}
 	parsedResponse := yesNoResponse{}
-	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```json", "```", "```json")
+	prompt = fmt.Sprintf(prompt, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```", "```json")
 	minResults := 3
 	resultsToRequest := 0
 retry:
@@ -410,7 +410,7 @@ func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStrea
 	sw := fmt.Sprintf(`
 Collection cycle: %d, compute cycles: %d, cycle breaks: %d, best of %d report, has score of %d, ratings map is: %v:
 %s
-`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings, codeblock(reports[maxIdx]))
+`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings, tools.CodeBlock(reports[maxIdx]))
 	info := fmt.Sprintf("Total reports: %d, reports selected: %d, final-reports-len: %d, queue len: %d\n",
 		atomic.LoadUint64(&reportsProcessed),
 		len(ratings),
@@ -428,8 +428,8 @@ type modelResponse struct {
 var errCounter uint64 = 0
 
 func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
-	prompt := `### Instruction:
-You are Report Comparing AI. You have to pick the best report for the primary goal.
+	prompt := tools.NewChatPrompt().
+		AddSystem(fmt.Sprintf(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
 %s
@@ -450,13 +450,37 @@ Provide response in the following JSON format:
     "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
     "best-report": "<A|both|B>",
 }
-%s
-### Assistant: 
-%s
-`
+%s`, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```"))
+	/*prompt := `### Instruction:
+	You are Report Comparing AI. You have to pick the best report for the primary goal.
+
+	Primary goal:
+	%s
+
+	Your task is to compare following two reports:
+	Report A:
+	%s
+
+	Report B:
+	%s
+
+	Please help to choose a report for further processing.
+	Which of the reports is more comprehensive and better aligns with the primary goal?
+	Provide response in the following JSON format:
+
+	%s
+	{
+	    "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
+	    "best-report": "<A|both|B>",
+	}
+	%s
+	### Assistant:
+	%s
+	`
+		prompt = fmt.Sprintf(prompt, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```", "```json")*/
 	// "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
 	parsedResponse := modelResponse{}
-	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```json", "```", "```json")
+
 	minResults := 3
 	resultsToRequest := 0
 retry:
@@ -464,7 +488,7 @@ retry:
 	response, err := him.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: "final-reports-processor",
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
-			RawPrompt:   prompt,
+			RawPrompt:   prompt.DefString(),
 			MinResults:  resultsToRequest,
 			Temperature: 0.9,
 		}, minResults),
@@ -567,8 +591,8 @@ Current choice is (total errors = %d, parse error = %v):
 }
 
 func (him *HIM) generateUpdatedReport(goal, a, b string) []string {
-	updatedReportQuery := fmt.Sprintf(`### Instruction:
-You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
+	updatedReportQuery := tools.NewChatPrompt().
+		AddSystem(fmt.Sprintf(`You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
 Primary goal:
 %s
 
@@ -579,13 +603,10 @@ Your task is to compare and merge if appropriate these drafts:
 
 Please focus only on the facts and disregard any secondary or ancillary comments and discussions that the field agents have included in the drafts.
 Re-structure the draft above to make it easy to read and comprehend, don't miss facts or entities in updated draft.
-
-### Assistant:
-%s`,
-		codeblock(goal),
-		codeblock(a),
-		codeblock(b),
-		"")
+`,
+			tools.CodeBlock(goal),
+			tools.CodeBlock(a),
+			tools.CodeBlock(b))).DefString()
 
 	minResults := 0
 retryUpdatedReport:
@@ -668,10 +689,6 @@ func removeDuplicates(options []string) []string {
 	}
 
 	return resultsSlice
-}
-
-func codeblock(s string) string {
-	return fmt.Sprintf("```\n%s\n```", s)
 }
 
 func isStringContains(a string, b []string) bool {

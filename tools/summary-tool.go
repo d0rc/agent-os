@@ -69,23 +69,36 @@ func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.A
 		retryCounter := 0
 	retryGeneratingSummary:
 		retryCounter++
+
+		/*
+			fmt.Sprintf(`
+			### User: Source data:
+
+			%s
+
+			%s
+
+			%s
+			### Assistant:%s
+			`, "```\n"+strings.TrimSpace(snippet)+"\n```",
+								"```\n"+strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))+"\n```",
+								systemPrompt, assistantPrefix)
+		*/
+
+		rawPrompt := NewChatPrompt().
+			AddUser("Source data:\n" + CodeBlock(snippet))
+		processedSummary := strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))
+		if processedSummary != "" {
+			rawPrompt = rawPrompt.AddUser(CodeBlock(processedSummary))
+		}
+		rawPromptString := rawPrompt.AddUser(systemPrompt).DefString()
+
 		tmp, err := os_client.ProcessGetCompletions([]cmds.GetCompletionRequest{
 			{
-				RawPrompt: fmt.Sprintf(`
-### User: Source data:
-
-%s
-
-%s
-
-%s
-### Assistant:%s
-`, "```\n"+strings.TrimSpace(snippet)+"\n```",
-					"```\n"+strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))+"\n```",
-					systemPrompt, assistantPrefix),
+				RawPrompt:   rawPromptString + assistantPrefix,
 				Model:       model,
 				Temperature: 0.8,
-				StopTokens:  []string{"###"},
+				StopTokens:  []string{"<|im_end|>", "<|im_start|>"},
 				MinResults:  minResults,
 				//BestOf:      3,
 				MaxResults: minResults,

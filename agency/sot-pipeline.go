@@ -4,6 +4,7 @@ import (
 	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
 	message_store "github.com/d0rc/agent-os/message-store"
+	"github.com/d0rc/agent-os/tools"
 )
 
 func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPendingRequests int) {
@@ -33,7 +34,7 @@ func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPe
 				Priority:    borrow_engine.PRIO_User,
 				GetCompletionRequests: []cmds.GetCompletionRequest{
 					{
-						RawPrompt:   chatToRawPrompt(semanticSpace.TrajectoryToMessages(request)),
+						RawPrompt:   tools.NewChatPromptWithMessages(semanticSpace.TrajectoryToMessages(request)).DefString(),
 						MinResults:  agentState.space.GetGrowthFactor() * 3,
 						Temperature: 0.9,
 					},

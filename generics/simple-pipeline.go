@@ -2,7 +2,6 @@ package generics
 
 import (
 	"fmt"
-	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/cmds"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
@@ -53,7 +52,7 @@ type SimplePipeline struct {
 	Vars                    map[string]interface{}
 	Temperature             float32
 	AssistantResponsePrefix map[int]string
-	ResponseFields          []agency.MapKV
+	ResponseFields          []tools.MapKV
 	MinParsableResults      int
 	ResultsProcessor        map[string]func(string) error
 	Client                  *os_client.AgentOSClient
@@ -63,7 +62,7 @@ func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
 	return &SimplePipeline{
 		Vars:                    make(map[string]interface{}),
 		AssistantResponsePrefix: make(map[int]string),
-		ResponseFields:          make([]agency.MapKV, 0),
+		ResponseFields:          make([]tools.MapKV, 0),
 		MinParsableResults:      2,
 		Temperature:             0.1,
 		ResultsProcessor:        make(map[string]func(string) error),
@@ -92,7 +91,7 @@ func (p *SimplePipeline) WithAssistantResponsePrefixOnStepNo(stepNo int, prefix 
 }
 
 func (p *SimplePipeline) AddResponseFields(key string, value string) *SimplePipeline {
-	p.ResponseFields = append(p.ResponseFields, agency.MapKV{Key: key, Value: value})
+	p.ResponseFields = append(p.ResponseFields, tools.MapKV{Key: key, Value: value})
 	return p
 }
 
@@ -113,7 +112,7 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 	}
 
 	jsonBuffer := &strings.Builder{}
-	agency.RenderJsonString(p.ResponseFields, jsonBuffer, 0)
+	tools.RenderJsonString(p.ResponseFields, jsonBuffer, 0)
 
 	systemMessage, err := tpl.Execute(p.Vars)
 	if err != nil {
@@ -128,7 +127,7 @@ retry:
 	response, err := p.Client.RunRequest(&cmds.ClientRequest{
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
-				RawPrompt:   NewChatPrompt().AddSystem(systemMessage).String(PSAlpaca),
+				RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).String(tools.PSAlpaca),
 				Temperature: p.Temperature,
 				MinResults:  minResults,
 			},

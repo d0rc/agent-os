@@ -1,4 +1,4 @@
-package generics
+package tools
 
 import (
 	"github.com/d0rc/agent-os/engines"
@@ -19,6 +19,12 @@ type ChatPrompt struct {
 func NewChatPrompt() *ChatPrompt {
 	return &ChatPrompt{
 		messages: make([]*engines.Message, 0),
+	}
+}
+
+func NewChatPromptWithMessages(messages []*engines.Message) *ChatPrompt {
+	return &ChatPrompt{
+		messages: messages,
 	}
 }
 
@@ -51,6 +57,10 @@ func (p *ChatPrompt) AddMessage(msg *engines.Message) *ChatPrompt {
 	return p
 }
 
+func (p *ChatPrompt) DefString() string {
+	return p.String(PSChatML)
+}
+
 func (p *ChatPrompt) String(style PromptStyle) string {
 	finalPrompt := strings.Builder{}
 	if style == PSAlpaca {
@@ -69,6 +79,25 @@ func (p *ChatPrompt) String(style PromptStyle) string {
 		}
 
 		finalPrompt.WriteString("### Assistant:\n")
+	} else if style == PSChatML {
+		for _, m := range p.messages {
+			switch m.Role {
+			case engines.ChatRoleSystem:
+				finalPrompt.WriteString("<|im_start|>system\n")
+				finalPrompt.WriteString(m.Content)
+				finalPrompt.WriteString("<|im_end|>")
+			case engines.ChatRoleAssistant:
+				finalPrompt.WriteString("<|im_start|>assistant\n")
+				finalPrompt.WriteString(m.Content)
+				finalPrompt.WriteString("<|im_end|>")
+			case engines.ChatRoleUser:
+				finalPrompt.WriteString("<|im_start|>user\n")
+				finalPrompt.WriteString(m.Content)
+				finalPrompt.WriteString("<|im_end|>")
+			}
+		}
+
+		finalPrompt.WriteString("<im|start|>assistant\n")
 	}
 
 	return finalPrompt.String()

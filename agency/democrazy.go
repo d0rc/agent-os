@@ -36,10 +36,12 @@ func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription
 	votesCacheLock.RUnlock()
 
 	question := "How likely is it that executing the command will lead to achieving the goal?"
-	systemMessage := `Given goal:
+	voterPrompt := tools.NewChatPrompt().
+		AddSystem(fmt.Sprintf(`Given goal:
 %s
 And a command:
 %s
+
 %s
 Respond in the JSON format:
 {
@@ -47,9 +49,9 @@ Respond in the JSON format:
     "criticism": "constructive self-criticism, question your assumptions",
     "feedback": "provide your feedback on the command and it's alignment to the purpose, suggest refinements here",
     "rate": "rate probability on scale from 1 to 5"
-}`
+}`, tools.CodeBlock(initialGoal), tools.CodeBlock(actionDescription), question)).
+		DefString()
 
-	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n", question)
 	type votersResponse struct {
 		Thought   string      `json:"thought"`
 		Criticism string      `json:"criticism"`
@@ -64,7 +66,7 @@ retryVoting:
 		Priority:    borrow_engine.PRIO_User,
 		GetCompletionRequests: tools.Replicate(
 			cmds.GetCompletionRequest{
-				RawPrompt:  systemMessage,
+				RawPrompt:  voterPrompt,
 				MinResults: minResults,
 			}, minResults),
 	}, 120*time.Second, os_client.REP_Default)

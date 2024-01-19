@@ -51,7 +51,7 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 		BestOf      int      `json:"best_of"`
 	}
 
-	var stopTokens = []string{"###"}
+	var stopTokens = []string{"<|im_end|>", "<|im_start|>"}
 	if batch[0].Req.StopTokens != nil {
 		stopTokens = append(stopTokens, batch[0].Req.StopTokens...)
 	}

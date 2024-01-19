@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"strings"
 )
@@ -38,4 +39,8 @@ func DropDuplicates(list []string) []string {
 	}
 
 	return result
+}
+
+func CodeBlock(s string) string {
+	return fmt.Sprintf("```\n%s\n```", s)
 }

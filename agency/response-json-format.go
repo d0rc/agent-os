@@ -1,7 +1,7 @@
 package agency
 
 import (
-	"fmt"
+	"github.com/d0rc/agent-os/tools"
 	"gopkg.in/yaml.v3"
 	"strings"
 )
@@ -10,7 +10,7 @@ type responseFormatJsonContext struct {
 	parsingStarted     bool
 	processingFailed   bool
 	finalJson          []string
-	finalJsonStructure [][]MapKV
+	finalJsonStructure [][]tools.MapKV
 }
 
 func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
@@ -32,7 +32,7 @@ func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
 							ctx.processingFailed = true
 						} else {
 							responseStructure := tryToCollectJsonString(node.Content[i+1], ctx)
-							jsonString := RenderJsonString(responseStructure, &strings.Builder{}, 0)
+							jsonString := tools.RenderJsonString(responseStructure, &strings.Builder{}, 0)
 							//fmt.Printf("responseStructure: %v\n", jsonString)
 							ctx.finalJson = append(ctx.finalJson, jsonString)
 							ctx.finalJsonStructure = append(ctx.finalJsonStructure, responseStructure)
@@ -51,40 +51,14 @@ func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
 	}
 }
 
-func RenderJsonString(structure []MapKV, buffer *strings.Builder, depth int) string {
-	if depth == 0 {
-		buffer.WriteString("{\n")
-		RenderJsonString(structure, buffer, depth+1)
-		buffer.WriteString("}\n")
-	} else {
-		for _, kv := range structure {
-			if kv.Value != nil {
-				buffer.WriteString(fmt.Sprintf("%s\"%s\": \"%s\",\n", strings.Repeat("\t", depth), kv.Key, kv.Value))
-			} else {
-				buffer.WriteString(fmt.Sprintf("%s\"%s\": {\n", strings.Repeat("\t", depth), kv.Key))
-				RenderJsonString(kv.InnerMap, buffer, depth+1)
-				buffer.WriteString(fmt.Sprintf("%s},\n", strings.Repeat("\t", depth)))
-			}
-		}
-	}
-
-	return buffer.String()
-}
-
-type MapKV struct {
-	Key      string
-	Value    interface{}
-	InnerMap []MapKV
-}
-
-func tryToCollectJsonString(node *yaml.Node, ctx *responseFormatJsonContext) []MapKV {
+func tryToCollectJsonString(node *yaml.Node, ctx *responseFormatJsonContext) []tools.MapKV {
 	if node.Tag == "!!map" {
-		mapData := make([]MapKV, 0)
-		currentKV := &MapKV{}
+		mapData := make([]tools.MapKV, 0)
+		currentKV := &tools.MapKV{}
 		for idx, contentNode := range node.Content {
 			if contentNode.Tag == "!!str" && idx%2 == 0 {
 				// it seems to be map key
-				currentKV = &MapKV{Key: contentNode.Value}
+				currentKV = &tools.MapKV{Key: contentNode.Value}
 			}
 			if idx%2 == 1 {
 				if contentNode.Tag == "!!str" {

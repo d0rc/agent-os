@@ -25,7 +25,7 @@ type GeneralAgentSettings struct {
 	LifeCycleType         LifeCycleType             `yaml:"life-cycle-type"`
 	LifeCycleLength       int                       `yaml:"life-cycle-length"`
 	renderedJson          string
-	renderedJsonStructure []MapKV
+	renderedJsonStructure []tools.MapKV
 }
 
 type ResponseFormatType map[string]interface{}
@@ -91,7 +91,7 @@ type Node struct {
 	Parent string
 }
 
-func ParseYAML(data []byte) ([]Node, []string, [][]MapKV, error) {
+func ParseYAML(data []byte) ([]Node, []string, [][]tools.MapKV, error) {
 	var nodes []Node
 
 	decoder := yaml.NewDecoder(io.Reader(bytes.NewReader(data)))
@@ -106,7 +106,7 @@ func ParseYAML(data []byte) ([]Node, []string, [][]MapKV, error) {
 		parsingStarted:     false,
 		processingFailed:   false,
 		finalJson:          make([]string, 0),
-		finalJsonStructure: make([][]MapKV, 0),
+		finalJsonStructure: make([][]tools.MapKV, 0),
 	}
 	buildResponseFormatJson(&node, ctx)
 
@@ -218,16 +218,16 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		}
 	}
 
-	collectedJsonStructure := make([]MapKV, 0)
+	collectedJsonStructure := make([]tools.MapKV, 0)
 	for _, el := range settings.Agent.renderedJsonStructure {
 		if _, ok := el.Value.(string); ok {
-			collectedJsonStructure = append(collectedJsonStructure, MapKV{
+			collectedJsonStructure = append(collectedJsonStructure, tools.MapKV{
 				Key:   el.Key,
 				Value: parsedStructure[el.Key],
 			})
 			continue
 		} else if el.InnerMap != nil {
-			collectedJsonStructure = append(collectedJsonStructure, MapKV{
+			collectedJsonStructure = append(collectedJsonStructure, tools.MapKV{
 				Key:      el.Key,
 				InnerMap: getUpdatedInnerMap(el.InnerMap, parsedStructure[el.Key]),
 			})
@@ -237,21 +237,21 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		}
 	}
 	//reconstructedParsedJson, _ := json.MarshalIndent(parsedStructure, "", "\t")
-	reconstructedParsedJson := RenderJsonString(collectedJsonStructure, &strings.Builder{}, 0)
+	reconstructedParsedJson := tools.RenderJsonString(collectedJsonStructure, &strings.Builder{}, 0)
 
 	return results, parsedString, reconstructedParsedJson, nil
 }
 
-func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
+func getUpdatedInnerMap(innerMap []tools.MapKV, parsed interface{}) []tools.MapKV {
 	if parsed == nil {
 		return nil
 	}
 	if len(innerMap) == 0 {
 		// we're at the bottom
 		if parsedMap, ok := parsed.(map[string]interface{}); ok {
-			newInnerMap := make([]MapKV, 0)
+			newInnerMap := make([]tools.MapKV, 0)
 			for k, v := range parsedMap {
-				newInnerMap = append(newInnerMap, MapKV{
+				newInnerMap = append(newInnerMap, tools.MapKV{
 					Key:   k,
 					Value: v,
 				})
@@ -261,20 +261,20 @@ func getUpdatedInnerMap(innerMap []MapKV, parsed interface{}) []MapKV {
 			fmt.Printf("don't know how to handle this type: %v\n", reflect.TypeOf(parsed))
 		}
 	}
-	newInnerMap := make([]MapKV, 0)
+	newInnerMap := make([]tools.MapKV, 0)
 	if parsedMap, ok := parsed.(map[string]interface{}); ok {
 		for _, el := range innerMap {
 			if _, ok := el.Value.(string); ok {
 				parsedValue, ok := parsedMap[el.Key].(string)
 				if ok {
-					newInnerMap = append(newInnerMap, MapKV{
+					newInnerMap = append(newInnerMap, tools.MapKV{
 						Key:   el.Key,
 						Value: parsedValue,
 					})
 				}
 				continue
 			} else if innerMapValue, ok := parsed.(map[string]interface{})[el.Key]; ok {
-				newInnerMap = append(newInnerMap, MapKV{
+				newInnerMap = append(newInnerMap, tools.MapKV{
 					Key:      el.Key,
 					InnerMap: getUpdatedInnerMap(el.InnerMap, innerMapValue),
 				})
