@@ -2,7 +2,7 @@ package cmds
 
 import (
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/server"
 )
 
 func ProcessWriteMessagesTrace(name string, traces []*engines.Message, ctx *server.Context, processName string) (*ServerResponse, error) {

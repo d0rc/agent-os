@@ -3,8 +3,8 @@ package agency
 import (
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	message_store "github.com/d0rc/agent-os/message-store"
-	os_client "github.com/d0rc/agent-os/os-client"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/os-client"
 	"time"
 )
 

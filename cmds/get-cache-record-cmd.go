@@ -1,7 +1,7 @@
 package cmds
 
 import (
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/server"
 )
 
 func ProcessGetCacheRecords(requests []GetCacheRecord, ctx *server.Context, process string) (response *ServerResponse, err error) {

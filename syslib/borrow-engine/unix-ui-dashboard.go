@@ -3,7 +3,7 @@ package borrow_engine
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/d0rc/agent-os/metrics"
+	"github.com/d0rc/agent-os/stdlib/metrics"
 	ui "github.com/gizak/termui/v3"
 	"log"
 	"sync"

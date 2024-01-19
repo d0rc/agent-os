@@ -1,10 +1,10 @@
 package agency
 
 import (
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	message_store "github.com/d0rc/agent-os/message-store"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/tools"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
 )
 
 func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPendingRequests int) {

@@ -3,7 +3,7 @@ package unidb
 import (
 	"embed"
 	"fmt"
-	"github.com/d0rc/agent-os/sshtunnel"
+	"github.com/d0rc/agent-os/stdlib/sshtunnel"
 	"net"
 	"strings"
 	"time"

@@ -3,8 +3,8 @@ package cmds
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/d0rc/agent-os/batcher"
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/batcher"
+	"github.com/d0rc/agent-os/syslib/server"
 	g "github.com/serpapi/google-search-results-golang"
 	"sync"
 	"time"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/server"
 	"io"
 	"net/http"
 	"net/url"

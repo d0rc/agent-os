@@ -3,11 +3,11 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"github.com/d0rc/agent-os/server"
-	"github.com/d0rc/agent-os/utils"
+	"github.com/d0rc/agent-os/stdlib/os-client"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
+	"github.com/d0rc/agent-os/syslib/utils"
 	"github.com/logrusorgru/aurora"
 	zlog "github.com/rs/zerolog/log"
 	"math/rand"
@@ -69,21 +69,6 @@ func DocumentReduce(document, question, assistantPrefix string, ctx *os_client.A
 		retryCounter := 0
 	retryGeneratingSummary:
 		retryCounter++
-
-		/*
-			fmt.Sprintf(`
-			### User: Source data:
-
-			%s
-
-			%s
-
-			%s
-			### Assistant:%s
-			`, "```\n"+strings.TrimSpace(snippet)+"\n```",
-								"```\n"+strings.TrimSpace(strings.TrimPrefix(currentSummary, "Source data:"))+"\n```",
-								systemPrompt, assistantPrefix)
-		*/
 
 		rawPrompt := NewChatPrompt().
 			AddUser("Source data:\n" + CodeBlock(snippet))

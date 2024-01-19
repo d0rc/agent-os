@@ -2,9 +2,9 @@ package cmds
 
 import (
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
 	"strings"
 )
 

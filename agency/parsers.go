@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"strings"
 
 	//"gopkg.in/yaml.v2"

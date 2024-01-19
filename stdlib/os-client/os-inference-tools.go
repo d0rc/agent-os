@@ -1,8 +1,8 @@
 package os_client
 
 import (
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
 	"time"
 )
 

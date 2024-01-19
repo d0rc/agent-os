@@ -1,7 +1,7 @@
 package agency
 
 import (
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"gopkg.in/yaml.v3"
 	"strings"
 )

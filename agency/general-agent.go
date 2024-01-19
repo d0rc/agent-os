@@ -2,15 +2,15 @@ package agency
 
 import (
 	"fmt"
-	message_store "github.com/d0rc/agent-os/message-store"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/os-client"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"sync"
 	"time"
 
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"github.com/d0rc/agent-os/tools"
-	pongo2 "github.com/flosch/pongo2/v6"
+	"github.com/flosch/pongo2/v6"
 )
 
 type GeneralAgentInfo struct {

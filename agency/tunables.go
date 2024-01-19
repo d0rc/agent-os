@@ -1,7 +1,7 @@
 package agency
 
 import (
-	os_client "github.com/d0rc/agent-os/os-client"
+	"github.com/d0rc/agent-os/stdlib/os-client"
 	"time"
 )
 

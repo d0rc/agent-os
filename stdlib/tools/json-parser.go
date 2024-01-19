@@ -2,11 +2,11 @@ package tools
 
 import (
 	"fmt"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
 	"strings"
 
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	"github.com/d0rc/agent-os/server"
 	zlog "github.com/rs/zerolog/log"
 )
 

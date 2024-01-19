@@ -4,7 +4,7 @@ import (
 	"crypto/sha512"
 	"embed"
 	"encoding/hex"
-	"github.com/d0rc/agent-os/unidb"
+	"github.com/d0rc/agent-os/stdlib/unidb"
 	"github.com/rs/zerolog"
 	zlog "github.com/rs/zerolog/log"
 	"strings"

@@ -1,8 +1,8 @@
 package cmds
 
 import (
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
 )
 
 type GetPageRequest struct {

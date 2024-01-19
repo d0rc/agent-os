@@ -2,10 +2,10 @@ package server
 
 import (
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/settings"
-	"github.com/d0rc/agent-os/storage"
+	"github.com/d0rc/agent-os/stdlib/settings"
+	"github.com/d0rc/agent-os/stdlib/storage"
+	be "github.com/d0rc/agent-os/syslib/borrow-engine"
 	"github.com/d0rc/agent-os/vectors"
 	"github.com/logrusorgru/aurora"
 	"github.com/rs/zerolog"
@@ -18,7 +18,7 @@ type Context struct {
 	Storage              *storage.Storage
 	Log                  zerolog.Logger
 	VectorDBs            []vectors.VectorDB
-	ComputeRouter        *borrow_engine.InferenceEngine
+	ComputeRouter        *be.InferenceEngine
 	DefaultEmbeddingsDim int
 }
 
@@ -41,8 +41,8 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 		os.Exit(1)
 	}
 
-	computeRouter := borrow_engine.NewInferenceEngine(borrow_engine.ComputeFunction{
-		borrow_engine.JT_Completion: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
+	computeRouter := be.NewInferenceEngine(be.ComputeFunction{
+		be.JT_Completion: func(n *be.InferenceNode, jobs []*be.ComputeJob) ([]*be.ComputeJob, error) {
 			lg.Warn().Msg("completion job received")
 			if len(jobs) == 0 {
 				return nil, nil
@@ -75,7 +75,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 			}
 			return jobs, nil
 		},
-		borrow_engine.JT_Embeddings: func(n *borrow_engine.InferenceNode, jobs []*borrow_engine.ComputeJob) ([]*borrow_engine.ComputeJob, error) {
+		be.JT_Embeddings: func(n *be.InferenceNode, jobs []*be.ComputeJob) ([]*be.ComputeJob, error) {
 			//			lg.Warn().Msg("embedding job received")
 			if len(jobs) == 0 {
 				return nil, nil
@@ -112,7 +112,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 			}
 			return jobs, nil
 		},
-	}, &borrow_engine.InferenceEngineSettings{
+	}, &be.InferenceEngineSettings{
 		TopInterval: srvSettings.TopInterval,
 		TermUI:      srvSettings.TermUI,
 		LogChan:     srvSettings.LogChan,
@@ -139,10 +139,10 @@ func (ctx *Context) GetDefaultEmbeddingDims() uint64 {
 func (ctx *Context) Start(onStart func(ctx *Context)) {
 	if len(ctx.Config.Compute) > 0 {
 		go ctx.ComputeRouter.Run()
-		detectedComputes := make([]chan *borrow_engine.InferenceNode, 0, len(ctx.Config.Compute))
+		detectedComputes := make([]chan *be.InferenceNode, 0, len(ctx.Config.Compute))
 		for _, node := range ctx.Config.Compute {
 			ctx.Log.Info().Msgf("adding compute node: %s", node.Endpoint)
-			detectedComputes = append(detectedComputes, ctx.ComputeRouter.AddNode(&borrow_engine.InferenceNode{
+			detectedComputes = append(detectedComputes, ctx.ComputeRouter.AddNode(&be.InferenceNode{
 				EndpointUrl:           node.Endpoint,
 				EmbeddingsEndpointUrl: node.EmbeddingsEndpoint,
 				MaxRequests:           node.MaxRequests,
@@ -167,14 +167,14 @@ func (ctx *Context) LaunchWorker(name string, worker func(ctx *Context, name str
 	go worker(ctx, name)
 }
 
-func translateJobTypes(types []string) []borrow_engine.JobType {
-	jobTypes := make([]borrow_engine.JobType, len(types))
+func translateJobTypes(types []string) []be.JobType {
+	jobTypes := make([]be.JobType, len(types))
 	for i, t := range types {
 		switch t {
 		case "embeddings":
-			jobTypes[i] = borrow_engine.JT_Embeddings
+			jobTypes[i] = be.JT_Embeddings
 		case "completion":
-			jobTypes[i] = borrow_engine.JT_Completion
+			jobTypes[i] = be.JT_Completion
 		}
 	}
 	return jobTypes

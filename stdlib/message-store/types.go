@@ -3,7 +3,7 @@ package message_store
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"sort"
 	"strings"
 	"sync"

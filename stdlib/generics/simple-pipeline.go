@@ -3,8 +3,8 @@ package generics
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/os-client"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/flosch/pongo2/v6"
 	"github.com/tidwall/gjson"
 	"strings"
