@@ -237,7 +237,7 @@ func (settings *AgentSettings) ParseResponse(response string) ([]*ResponseParser
 		}
 	}
 	//reconstructedParsedJson, _ := json.MarshalIndent(parsedStructure, "", "\t")
-	reconstructedParsedJson := renderJsonString(collectedJsonStructure, &strings.Builder{}, 0)
+	reconstructedParsedJson := RenderJsonString(collectedJsonStructure, &strings.Builder{}, 0)
 
 	return results, parsedString, reconstructedParsedJson, nil
 }

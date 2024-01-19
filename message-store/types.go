@@ -87,16 +87,18 @@ func (space *SemanticSpace) CancelPendingRequest(trajectoryID TrajectoryID) {
 	space.lock.Unlock()
 }
 
-func (space *SemanticSpace) Wait() {
+func (space *SemanticSpace) Wait() bool {
 	space.lock.Lock()
 	if space.nPendingRequests > 0 {
 		waitChan := make(chan struct{}, 1)
 		space.waiters = append(space.waiters, waitChan)
 		space.lock.Unlock()
 		<-waitChan
+		return false
 	} else {
 		space.lock.Unlock()
 		time.Sleep(100 * time.Millisecond)
+		return true
 	}
 }
 
@@ -110,7 +112,9 @@ func (space *SemanticSpace) AddMessage(trajectoryId *TrajectoryID, message *engi
 		newTrajectoryId := GenerateTrajectoryID(newTrajectory)
 		space.lock.Lock()
 		space.trajectories[newTrajectoryId] = &newTrajectory
-		if message.Role == engines.ChatRoleSystem || message.Role == engines.ChatRoleUser {
+		if message.Role == engines.ChatRoleSystem {
+			space.newRequests = append(space.newRequests, tools.Replicate(&newTrajectory, space.growthFactor)...)
+		} else if message.Role == engines.ChatRoleUser {
 			space.newRequests = append(space.newRequests, tools.Replicate(&newTrajectory, space.growthFactor)...)
 		}
 		space.lock.Unlock()

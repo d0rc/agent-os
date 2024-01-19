@@ -32,7 +32,7 @@ func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
 							ctx.processingFailed = true
 						} else {
 							responseStructure := tryToCollectJsonString(node.Content[i+1], ctx)
-							jsonString := renderJsonString(responseStructure, &strings.Builder{}, 0)
+							jsonString := RenderJsonString(responseStructure, &strings.Builder{}, 0)
 							//fmt.Printf("responseStructure: %v\n", jsonString)
 							ctx.finalJson = append(ctx.finalJson, jsonString)
 							ctx.finalJsonStructure = append(ctx.finalJsonStructure, responseStructure)
@@ -51,10 +51,10 @@ func buildResponseFormatJson(node *yaml.Node, ctx *responseFormatJsonContext) {
 	}
 }
 
-func renderJsonString(structure []MapKV, buffer *strings.Builder, depth int) string {
+func RenderJsonString(structure []MapKV, buffer *strings.Builder, depth int) string {
 	if depth == 0 {
 		buffer.WriteString("{\n")
-		renderJsonString(structure, buffer, depth+1)
+		RenderJsonString(structure, buffer, depth+1)
 		buffer.WriteString("}\n")
 	} else {
 		for _, kv := range structure {
@@ -62,7 +62,7 @@ func renderJsonString(structure []MapKV, buffer *strings.Builder, depth int) str
 				buffer.WriteString(fmt.Sprintf("%s\"%s\": \"%s\",\n", strings.Repeat("\t", depth), kv.Key, kv.Value))
 			} else {
 				buffer.WriteString(fmt.Sprintf("%s\"%s\": {\n", strings.Repeat("\t", depth), kv.Key))
-				renderJsonString(kv.InnerMap, buffer, depth+1)
+				RenderJsonString(kv.InnerMap, buffer, depth+1)
 				buffer.WriteString(fmt.Sprintf("%s},\n", strings.Repeat("\t", depth)))
 			}
 		}

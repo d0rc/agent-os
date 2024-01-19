@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/cmds"
@@ -10,6 +11,7 @@ import (
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
+	"github.com/logrusorgru/aurora"
 	"math/rand"
 	"os"
 	"strings"
@@ -25,6 +27,10 @@ var termUi = false
 
 var reportsProcessed = uint64(0)
 
+var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
+var startAgency = flag.Bool("start-agency", true, "start agency")
+var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
+
 func main() {
 	ts := time.Now()
 	lg, _ := utils.ConsoleInit("", &termUi)
@@ -37,8 +43,7 @@ func main() {
 
 	lg.Info().Interface("agencySettings", agencySettings).Msg("parsed agency")
 
-	//client := os_client.NewAgentOSClient("http://167.235.115.231:9000")
-	client := os_client.NewAgentOSClient("http://127.0.0.1:9000")
+	client := os_client.NewAgentOSClient(*agentOSUrl)
 	agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
 
 	var spawningCallback func(name, goal string) chan string
@@ -65,7 +70,9 @@ func main() {
 	finalReportsStream := make(chan string, 4096)
 	agentState.FinalReportChannel = finalReportsSink
 	//go agentState.ToTPipeline()
-	//go agentState.SoTPipeline(3, 20, 20)
+	if *startAgency {
+		go agentState.SoTPipeline(3, 80, 80)
+	}
 
 	go func() {
 		reports := make([]string, 0)
@@ -78,14 +85,14 @@ func main() {
 					continue
 				}
 
-				_ = os.WriteFile("/tmp/final-reports.json", serialized, 0644)
+				_ = os.WriteFile(*finalReportsPath, serialized, 0644)
 				finalReportsStream <- report
 			}
 		}
 	}()
 
 	storedReports := make([]string, 0)
-	storedReportsData, err := os.ReadFile("/tmp/final-reports.json")
+	storedReportsData, err := os.ReadFile(*finalReportsPath)
 	if err != nil {
 		lg.Error().Err(err).Msg("failed to read stored reports")
 	} else {
@@ -98,89 +105,242 @@ func main() {
 		}
 	}
 
-	finalReports := make([]string, 0)
-	for finalReport := range finalReportsStream {
-		finalReport = strings.TrimSpace(finalReport)
-		finalReports = removeDuplicates(append(finalReports, finalReport))
+	maxHims := 32
+	outputChannel := make(chan string)
+	initialHim := &HIM{
+		Id:                       fmt.Sprintf("him%03d", 0),
+		InputFinalReportsStream:  finalReportsStream,
+		OutputFinalReportsStream: outputChannel,
+		ContextGoal:              agentState.InputVariables["goal"].(string),
+		Client:                   client,
+	}
+	hims := []*HIM{initialHim}
 
-		if len(finalReports) > 2 {
-			//newFinalReports, ratings := naiveComparator(agentState, finalReports, client, againCounter)
+	go func(him *HIM) {
+		him.finalReportsMaker()
+	}(initialHim)
 
-			startingLength := len(finalReports)
-			for {
-				// we need to split finalReports into chunks of chunkSize
-				var chunks [][]string = make([][]string, 0)
-				chunkSize := 2
-
-				finalReports = shuffle(finalReports)
-				for i := 0; i < len(finalReports); i += chunkSize {
-					end := i + chunkSize
-					if end > len(finalReports) {
-						end = len(finalReports)
-					}
-					chunks = append(chunks, finalReports[i:end])
-				}
-
-				tools.AppendFile("hdr.log", fmt.Sprintf("Final reports: %d, chunks: %d, chunk size: %d\n",
-					len(finalReports),
-					len(chunks),
-					chunkSize))
-
-				chunksProcessingResults := make([]string, 0)
-				chunksProcessingResultsLock := sync.RWMutex{}
-				agentGoal := agentState.InputVariables["goal"].(string)
-				wg := sync.WaitGroup{}
-				for chunkIdx, chunkReports := range chunks {
-					if len(chunkReports) != 2 {
-						chunksProcessingResultsLock.Lock()
-						chunksProcessingResults = append(chunksProcessingResults, chunkReports...)
-						chunksProcessingResultsLock.Unlock()
-						continue
-					}
-					wg.Add(1)
-					go func(chunkIdx int, chunkReports []string, results *[]string, lock *sync.RWMutex) {
-						merged := generateUpdatedReport(client, agentGoal, chunkReports[0], chunkReports[1])
-						chunksProcessingResultsLock.Lock()
-						chunksProcessingResults = append(chunksProcessingResults, merged...)
-						chunksProcessingResultsLock.Unlock()
-						tools.AppendFile("hdr.log",
-							fmt.Sprintf("Processed chunk %d, output size is %d\n", chunkIdx, len(merged)))
-						wg.Done()
-					}(chunkIdx, chunkReports, &chunksProcessingResults, &chunksProcessingResultsLock)
-				}
-				wg.Wait()
-
-				if len(chunksProcessingResults) > 0 {
-					finalReports = removeDuplicates(chunksProcessingResults)
-				} else {
-					tools.AppendFile("hdr.log", fmt.Sprintf("No results for chunks, output size is 0"))
-				}
-
-				newFinalReports, ratings := naiveComparator(agentState, finalReports, client, 0)
-				newFinalReports = removeDuplicates(newFinalReports)
-
-				tools.AppendFile("hdr.log", fmt.Sprintf("ratings: %v\n", ratings))
-
-				// print reports from worth to best
-				printReports(ratings, finalReports, finalReportsStream)
-				if len(newFinalReports) > 0 {
-					finalReports = newFinalReports
-				}
-				// dropping all current reports, leaving only those which scored
-
-				if len(finalReports) == startingLength {
+	for {
+		if len(hims) < maxHims {
+			allBusy := true
+			for _, him := range hims {
+				if !him.Busy {
+					allBusy = false
 					break
 				}
-				startingLength = len(finalReports)
 			}
+
+			if allBusy {
+				idx := len(hims)
+				him := &HIM{
+					Id:                       fmt.Sprintf("him%03d", idx),
+					InputFinalReportsStream:  finalReportsStream,
+					OutputFinalReportsStream: outputChannel,
+					ContextGoal:              agentState.InputVariables["goal"].(string),
+					Client:                   client,
+				}
+
+				go func(him *HIM) {
+					him.finalReportsMaker()
+				}(him)
+
+				hims = append(hims, him)
+			}
+		} else {
+			break
 		}
+
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	for output := range outputChannel {
+		fmt.Println("OUTPUT: ", output)
 	}
 
 	fmt.Printf("Done in %v\n", time.Since(ts))
 }
 
+type HIM struct {
+	Id                       string
+	InputFinalReportsStream  chan string
+	OutputFinalReportsStream chan string
+	ContextGoal              string
+	Client                   *os_client.AgentOSClient
+	CollectionCycle          int
+	ComputeCycles            int
+	CycleBreaks              int
+	Busy                     bool
+}
+
+func (him *HIM) Printf(sfmt string, args ...interface{}) {
+	fmt.Printf(fmt.Sprintf("[%s] ", aurora.BrightYellow(him.Id))+sfmt, args...)
+}
+
+func (him *HIM) finalReportsMaker() {
+	finalReports := make([]string, 0)
+	for finalReport := range him.InputFinalReportsStream {
+		him.CollectionCycle++
+		finalReport = strings.TrimSpace(finalReport)
+		finalReports = removeDuplicates(append(finalReports, finalReport))
+
+		cycle := 0
+		initialNumberOfReports := len(finalReports)
+		for len(finalReports) > 2 {
+			him.Busy = true
+			finalReports = shuffle(finalReports)
+
+			cycle++
+			him.ComputeCycles++
+			if cycle > 10 && len(finalReports) <= initialNumberOfReports {
+				him.CycleBreaks++
+				break
+			}
+			him.Printf("Running cycle %d of #%d over %d reports, started with %d reports.\n",
+				cycle,
+				him.CollectionCycle,
+				len(finalReports),
+				initialNumberOfReports)
+			//newFinalReports, ratings := naiveComparator(agentState, finalReports, client, againCounter)
+
+			var chunks = make([][]string, 0)
+			chunkSize := 2
+
+			finalReports = shuffle(finalReports)
+			for i := 0; i < len(finalReports); i += chunkSize {
+				end := i + chunkSize
+				if end > len(finalReports) {
+					end = len(finalReports)
+				}
+				chunks = append(chunks, finalReports[i:end])
+			}
+
+			chunksProcessingResults := make([]string, 0)
+			chunksProcessingResultsLock := sync.RWMutex{}
+			agentGoal := him.ContextGoal
+			wg := sync.WaitGroup{}
+			for chunkIdx, chunkReports := range chunks {
+				if len(chunkReports) != 2 {
+					chunksProcessingResultsLock.Lock()
+					chunksProcessingResults = append(chunksProcessingResults, chunkReports...)
+					chunksProcessingResultsLock.Unlock()
+					continue
+				}
+				wg.Add(1)
+				go func(chunkIdx int, chunkReports []string, results *[]string, lock *sync.RWMutex) {
+					defer wg.Done()
+					reportsAreSame, _ := areReportsEqual(him.Client, agentGoal, chunkReports[0], chunkReports[1])
+					if reportsAreSame {
+						him.Printf("Got equal reports for chunk %d\n", chunkIdx)
+						chunksProcessingResultsLock.Lock()
+						chunksProcessingResults = append(chunksProcessingResults, chunkReports[0])
+						chunksProcessingResultsLock.Unlock()
+						return
+					}
+
+					merged := him.generateUpdatedReport(agentGoal, chunkReports[0], chunkReports[1])
+					if len(merged) == 0 {
+						merged = append(merged, chunkReports...)
+					}
+
+					chunksProcessingResultsLock.Lock()
+					chunksProcessingResults = append(chunksProcessingResults, merged...)
+					chunksProcessingResultsLock.Unlock()
+				}(chunkIdx, chunkReports, &chunksProcessingResults, &chunksProcessingResultsLock)
+			}
+			wg.Wait()
+
+			if len(chunksProcessingResults) > 0 {
+				finalReports = removeDuplicates(chunksProcessingResults)
+			}
+
+			him.Printf("Got %d reports, after merge phase\n", len(finalReports))
+
+			newFinalReports, ratings := him.naiveComparator(finalReports)
+			newFinalReports = removeDuplicates(newFinalReports)
+
+			him.Printf("Got %d reports, after compare phase\n", len(newFinalReports))
+
+			// print reports from worth to best
+			him.printReports(ratings, finalReports, him.InputFinalReportsStream)
+			if len(newFinalReports) > 0 {
+				finalReports = newFinalReports
+			}
+		}
+		him.Busy = false
+	}
+}
+
+func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, error) {
+	prompt := `### Instruction:
+You are Report Comparing AI. You have to pick the best report for the primary goal.
+
+Primary goal:
+%s
+
+Your task is to compare following two reports:
+Report A:
+%s
+
+Report B:
+%s
+
+Please help to choose a report for further processing.
+Are these reports the same?
+Provide response in the following JSON format:
+
+%s
+{
+    "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
+    "reports-are-equal": "<yes|no>",
+}
+%s
+
+### Assistant: 
+%s
+`
+	type yesNoResponse struct {
+		Thoughts        string `json:"thoughts"`
+		ReportsAreEqual string `json:"reports-are-equal"`
+	}
+	parsedResponse := yesNoResponse{}
+	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```json", "```", "```json")
+	minResults := 3
+	resultsToRequest := 0
+retry:
+	resultsToRequest += minResults
+	response, err := client.RunRequest(&cmds.ClientRequest{
+		ProcessName: "final-reports-processor",
+		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
+			RawPrompt:   prompt,
+			MinResults:  resultsToRequest,
+			Temperature: 0.1,
+		}, minResults),
+	}, 600*time.Second, os_client.REP_Default)
+	if err != nil {
+		fmt.Printf("Error getting response, going to retry")
+		goto retry
+	}
+
+	yesCounter := 0
+	for _, choice := range tools.FlattenChoices(response.GetCompletionResponse) {
+		err := tools.ParseJSON(choice, func(s string) error {
+			return json.Unmarshal([]byte(s), &parsedResponse)
+		})
+		if err == nil {
+			if parsedResponse.ReportsAreEqual == "yes" {
+				yesCounter++
+			}
+		}
+	}
+
+	if yesCounter >= 2 {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 func shuffle(reports []string) []string {
-	//rand.Seed(time.Now().UnixNano())
 	for i := len(reports) - 1; i > 0; i-- {
 		j := rand.Intn(i + 1)
 		reports[i], reports[j] = reports[j], reports[i]
@@ -188,12 +348,12 @@ func shuffle(reports []string) []string {
 	return reports
 }
 
-func naiveComparator(agentState *agency.GeneralAgentInfo, finalReports []string, client *os_client.AgentOSClient, againCounter int) ([]string, map[int]int) {
+func (him *HIM) naiveComparator(finalReports []string) ([]string, map[int]int) {
 	newFinalReports := make([]string, 0)
 	ratings := make(map[int]int)
 	wg := sync.WaitGroup{}
 	lock := sync.RWMutex{}
-	agentGoal := agentState.InputVariables["goal"].(string)
+	agentGoal := him.ContextGoal
 	for idxA, reportA := range finalReports {
 		for idxB, reportB := range finalReports {
 			if idxA == idxB {
@@ -209,7 +369,7 @@ func naiveComparator(agentState *agency.GeneralAgentInfo, finalReports []string,
 
 				compareReports := func(idxA, idxB int, reportA, reportB string) {
 					defer wg.Done()
-					yes, err := isReportABetter(client, agentGoal, reportA, reportB)
+					yes, err := him.isReportABetter(agentGoal, reportA, reportB)
 					if err != nil {
 						return
 					}
@@ -217,23 +377,12 @@ func naiveComparator(agentState *agency.GeneralAgentInfo, finalReports []string,
 						lock.Lock()
 						ratings[idxA]++
 						lock.Unlock()
-						//ratings[idxB]--
 					}
 				}
 
 				wg.Add(2)
 				go compareReports(idxA, idxB, reportA, reportB)
 				go compareReports(idxB, idxA, reportB, reportA)
-				/*if againCounter == 1 {
-					updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
-					if updatedReport != "" {
-						newFinalReports = append(newFinalReports, updatedReport)
-					}
-				}*/
-				//updatedReport := generateUpdatedReport(client, nil, agentGoal, reportA, reportB)
-				//if updatedReport != "" {
-				//	newFinalReports = append(newFinalReports, updatedReport)
-				//}
 			}(idxA, idxB, reportA, reportB)
 		}
 	}
@@ -248,16 +397,10 @@ func naiveComparator(agentState *agency.GeneralAgentInfo, finalReports []string,
 	return newFinalReports, ratings
 }
 
-func printReports(ratings map[int]int, reports []string, reportsStream chan string) {
-	minVal := ratings[0]
-	minIdx := 0
+func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStream chan string) {
 	maxVal := ratings[0]
 	maxIdx := 0
 	for idx, val := range ratings {
-		if val < minVal {
-			minVal = val
-			minIdx = idx
-		}
 		if val > maxVal {
 			maxVal = val
 			maxIdx = idx
@@ -265,19 +408,15 @@ func printReports(ratings map[int]int, reports []string, reportsStream chan stri
 	}
 	// create a string writer
 	sw := fmt.Sprintf(`
-Best report, has score of %d:
+Collection cycle: %d, compute cycles: %d, cycle breaks: %d, best of %d report, has score of %d, ratings map is: %v:
 %s
-
-Least scored report, has score of %d:
-%s
-`, maxVal, codeblock(reports[maxIdx]), minVal, codeblock(reports[minIdx]))
+`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings, codeblock(reports[maxIdx]))
 	info := fmt.Sprintf("Total reports: %d, reports selected: %d, final-reports-len: %d, queue len: %d\n",
 		atomic.LoadUint64(&reportsProcessed),
 		len(ratings),
 		len(reports),
-		len(reportsStream)) + sw
-	_ = os.WriteFile("reports-table.txt", []byte(info), 0644)
-	fmt.Println(info)
+		len(reportsStream))
+	_ = os.WriteFile(fmt.Sprintf("reports-table-%s.txt", him.Id), []byte(info+sw), 0644)
 }
 
 type modelResponse struct {
@@ -288,7 +427,7 @@ type modelResponse struct {
 
 var errCounter uint64 = 0
 
-func isReportABetter(client *os_client.AgentOSClient, goal string, a string, b string) (bool, error) {
+func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
 	prompt := `### Instruction:
 You are Report Comparing AI. You have to pick the best report for the primary goal.
 
@@ -302,13 +441,14 @@ Report A:
 Report B:
 %s
 
+Please help to choose a report for further processing.
 Which of the reports is more comprehensive and better aligns with the primary goal?
 Provide response in the following JSON format:
 
 %s
 {
     "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
-    "best-report": "<A|B>",
+    "best-report": "<A|both|B>",
 }
 %s
 ### Assistant: 
@@ -317,18 +457,20 @@ Provide response in the following JSON format:
 	// "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
 	parsedResponse := modelResponse{}
 	prompt = fmt.Sprintf(prompt, codeblock(goal), codeblock(a), codeblock(b), "```json", "```", "```json")
-	minResults := 5
+	minResults := 3
+	resultsToRequest := 0
 retry:
-	response, err := client.RunRequest(&cmds.ClientRequest{
+	resultsToRequest += minResults
+	response, err := him.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: "final-reports-processor",
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
 			RawPrompt:   prompt,
-			MinResults:  minResults,
+			MinResults:  resultsToRequest,
 			Temperature: 0.9,
 		}, minResults),
 	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
-		fmt.Printf("Error getting response, going to retry")
+		him.Printf("Error getting response, going to retry")
 		goto retry
 	}
 
@@ -336,6 +478,10 @@ retry:
 	votesB := 0
 	resultsProcessed := 0
 	//goodChoice := ""
+	choices := tools.FlattenChoices(response.GetCompletionResponse)
+	if len(choices) > resultsToRequest {
+		resultsToRequest = len(choices) + 1
+	}
 	for _, choice := range tools.FlattenChoices(response.GetCompletionResponse) {
 		choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 		if isStringContains(choice, []string{
@@ -349,7 +495,7 @@ retry:
 			`best-report": "<BOTH A and B>"`,
 			`best-report": "both"`,
 		}) {
-			if len(a) > len(b) {
+			if len(a) < len(b) {
 				votesA++
 			} else {
 				votesB++
@@ -391,8 +537,8 @@ Current choice is (total errors = %d, parse error = %v):
 		} else if parsedResponse.BestReport == "B" || strings.HasPrefix(parsedResponse.BestReport, "B_") {
 			votesB++
 			resultsProcessed++
-		} else if parsedResponse.BestReport == "Neither" || parsedResponse.BestReport == "A, B" || parsedResponse.BestReport == "A,B" {
-			if len(a) > len(b) {
+		} else {
+			if len(a) < len(b) {
 				votesA++
 				resultsProcessed++
 			} else {
@@ -400,17 +546,11 @@ Current choice is (total errors = %d, parse error = %v):
 				resultsProcessed++
 			}
 		}
-
-		if parsedResponse.BestReport == "A" || parsedResponse.BestReport == "B" {
-			//updatedReport := parsedResponse.UpdatedReport
-			// let's try to get updated report now
-			//goodChoice = choice
-		}
 	}
 
-	if resultsProcessed < 3 {
-		minResults++
-		fmt.Printf("Got not enough results (%d/%d), going to retry\n", resultsProcessed,
+	if resultsProcessed < minResults {
+		resultsToRequest++
+		him.Printf("Got not enough results (%d/%d), going to retry\n", resultsProcessed,
 			len(response.GetCompletionResponse[0].Choices))
 		if len(response.GetCompletionResponse[0].Choices) > 15 {
 			return false, fmt.Errorf("error getting parsable response")
@@ -418,7 +558,7 @@ Current choice is (total errors = %d, parse error = %v):
 		goto retry
 	}
 
-	fmt.Printf("Got enough results (%d/%d) [%d vs %d]\n",
+	him.Printf("Got enough results (%d/%d) [%d vs %d]\n",
 		resultsProcessed,
 		len(response.GetCompletionResponse),
 		votesA, votesB)
@@ -426,111 +566,91 @@ Current choice is (total errors = %d, parse error = %v):
 	return votesA > votesB, nil
 }
 
-func generateUpdatedReport(client *os_client.AgentOSClient,
-	goal, a, b string) []string {
+func (him *HIM) generateUpdatedReport(goal, a, b string) []string {
 	updatedReportQuery := fmt.Sprintf(`### Instruction:
 You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
 Primary goal:
 %s
 
-Your task is to compare following two reports:
-Report A:
+Your task is to compare and merge if appropriate these drafts:
+
+%s
 %s
 
-Report B:
-%s
-
-### User: Summarize reports A and B into a single summary, mention any contradictions you find, use markdown format:
+Please focus only on the facts and disregard any secondary or ancillary comments and discussions that the field agents have included in the drafts.
+Re-structure the draft above to make it easy to read and comprehend, don't miss facts or entities in updated draft.
 
 ### Assistant:
 %s`,
 		codeblock(goal),
 		codeblock(a),
 		codeblock(b),
-		"```json\n")
+		"")
 
+	minResults := 0
 retryUpdatedReport:
-	updatedReportResponse, err := client.RunRequest(&cmds.ClientRequest{
+	minResults++
+	updatedReportResponse, err := him.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: "final-reports-processor",
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
 				RawPrompt:   updatedReportQuery,
-				MinResults:  1,
-				Temperature: 0.1,
+				MinResults:  minResults,
+				Temperature: 0.9,
 			},
 		},
 	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
 		time.Sleep(100 * time.Millisecond)
-		fmt.Printf("Error getting response for updated report, going to retry")
+		him.Printf("Error getting response for updated report, going to retry")
 		goto retryUpdatedReport
 	}
 
-	updatedReport := updatedReportResponse.GetCompletionResponse[0].Choices[0]
-	contentCheck := strings.ReplaceAll(updatedReport, " ", "")
-	contentCheck = strings.ReplaceAll(contentCheck, "`", "")
-	contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
-	contentCheck = strings.ReplaceAll(contentCheck, "\r", "")
-	contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
-	lowerCasedReport := strings.ToLower(updatedReport)
-	if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 &&
-		!strings.Contains(lowerCasedReport, "report a") &&
-		!strings.Contains(lowerCasedReport, "report b") &&
-		!strings.Contains(lowerCasedReport, "reports a") {
-		ratings := make(map[string]int)
-		reportsList := append([]string{}, a, b, updatedReport)
-		updatedReportId := engines.GenerateMessageId(updatedReport)
-		for _, reportA := range reportsList {
-			reportAId := engines.GenerateMessageId(reportA)
-			for _, reportB := range reportsList {
-				reportBId := engines.GenerateMessageId(reportB)
-				if reportAId == reportBId {
-					continue
-				}
-				if !(reportAId == updatedReportId || reportBId == updatedReportId) {
-					continue
-				}
-				isBetter, err := isReportABetter(client, goal, reportA, reportB)
-				if err != nil {
-					continue
-				}
-				if isBetter {
-					ratings[reportAId]++
+	choices := tools.FlattenChoices(updatedReportResponse.GetCompletionResponse)
+	if len(choices) > minResults {
+		minResults = len(choices) + 1
+		goto retryUpdatedReport
+	}
+
+	for _, updatedReport := range choices {
+		contentCheck := strings.ReplaceAll(updatedReport, " ", "")
+		contentCheck = strings.ReplaceAll(contentCheck, "`", "")
+		contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
+		contentCheck = strings.ReplaceAll(contentCheck, "\r", "")
+		contentCheck = strings.ReplaceAll(contentCheck, "\t", "")
+		lowerCasedReport := strings.ToLower(updatedReport)
+		if updatedReport != "" && len(updatedReport) > 10 && len(contentCheck) > 10 &&
+			!strings.Contains(lowerCasedReport, "report a") &&
+			!strings.Contains(lowerCasedReport, "report b") &&
+			!strings.Contains(lowerCasedReport, "reports a") {
+			ratings := make(map[string]int)
+			reportsList := append([]string{}, a, b, updatedReport)
+			allOptions := make([]string, 0)
+			for _, reportA := range reportsList {
+				reportAId := engines.GenerateMessageId(reportA)
+				for _, reportB := range reportsList {
+					reportBId := engines.GenerateMessageId(reportB)
+					if reportAId == reportBId {
+						continue
+					}
+
+					isBetter, err := him.isReportABetter(goal, reportA, reportB)
+					if err != nil {
+						continue
+					}
+					if isBetter {
+						ratings[reportAId]++
+						allOptions = append(allOptions, reportA)
+					}
 				}
 			}
-		}
 
-		// no let's pick to best and return those
-		var maxKey1, maxKey2 string
-		var maxValue1, maxValue2 int
-
-		for key, value := range ratings {
-			if value > maxValue1 {
-				// Update second highest
-				maxValue2 = maxValue1
-				maxKey2 = maxKey1
-
-				// Update highest
-				maxValue1 = value
-				maxKey1 = key
-			} else if value > maxValue2 {
-				// Update second highest
-				maxValue2 = value
-				maxKey2 = key
+			// remove all duplicates
+			results := removeDuplicates(allOptions)
+			if len(results) <= 2 {
+				return results
 			}
 		}
-		// if any of maxKey1, or maxKey2 is empty, then we have no choice
-		// but to return a or b instead of empty strings
-		allOptions := []string{maxKey1, maxKey2, a, b}
-		// remove all empty strings
-		for i, option := range allOptions {
-			if option == "" {
-				allOptions = append(allOptions[:i], allOptions[i+1:]...)
-			}
-		}
-		// remove all duplicates
-		return removeDuplicates(allOptions)
-
 	}
 
 	return []string{a, b}

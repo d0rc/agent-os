@@ -15,23 +15,26 @@ func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPe
 	}
 
 	_ = semanticSpace.AddMessage(nil, systemMessage)
+	waitCount := 0
 	for {
 		requests := semanticSpace.GetComputeRequests(maxRequests, maxPendingRequests)
 		if len(requests) == 0 {
-			agentState.space.Wait()
+			if agentState.space.Wait() {
+				waitCount++
+			}
+
 			continue
 		}
 
 		// if got here we have a requests to execute...
 		for _, request := range requests {
-
 			agentState.jobsChannel <- &cmds.ClientRequest{
 				ProcessName: agentState.SystemName,
 				Priority:    borrow_engine.PRIO_User,
 				GetCompletionRequests: []cmds.GetCompletionRequest{
 					{
 						RawPrompt:   chatToRawPrompt(semanticSpace.TrajectoryToMessages(request)),
-						MinResults:  agentState.space.GetGrowthFactor(),
+						MinResults:  agentState.space.GetGrowthFactor() * 3,
 						Temperature: 0.9,
 					},
 				},
