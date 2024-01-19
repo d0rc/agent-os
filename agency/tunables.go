@@ -17,3 +17,5 @@ const WriteVotesLog = true
 const MaxJobsPerAgent = 160
 const JobsManagerInferenceTimeout = 600 * time.Second
 const JobsManagerExecutionPool = os_client.REP_Default
+
+const ShouldWriteMessageTrace = false
