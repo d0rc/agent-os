@@ -8,12 +8,14 @@ import (
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/d0rc/agent-os/generics"
 	os_client "github.com/d0rc/agent-os/os-client"
 	"github.com/d0rc/agent-os/tools"
 	"github.com/d0rc/agent-os/utils"
 	"github.com/logrusorgru/aurora"
 	"math/rand"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -428,166 +430,88 @@ type modelResponse struct {
 var errCounter uint64 = 0
 
 func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
-	prompt := tools.NewChatPrompt().
-		AddSystem(fmt.Sprintf(`You are Report Comparing AI. You have to pick the best report for the primary goal.
+	votesA := uint64(0)
+	votesB := uint64(0)
+	resultsProcessed := uint64(0)
+	resultsAttempted := uint64(0)
+
+	err := generics.CreateSimplePipeline(him.Client).
+		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
-%s
+{{goal}}
 
 Your task is to compare following two reports:
 Report A:
-%s
+{{repA}}
 
 Report B:
-%s
+{{repB}}
 
 Please help to choose a report for further processing.
-Which of the reports is more comprehensive and better aligns with the primary goal?
-Provide response in the following JSON format:
+Which of the reports is more comprehensive and better aligns with the primary goal?`).
+		WithVar("goal", goal).
+		WithVar("repA", a).
+		WithVar("repB", b).
+		WithResponseField("thoughts", "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal").
+		WithResponseField("best-report", "<A|both|B>").
+		WithFullResultProcessor(func(choice string) error {
+			atomic.AddUint64(&resultsAttempted, 1)
+			choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 
-%s
-{
-    "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
-    "best-report": "<A|both|B>",
-}
-%s`, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```"))
-	/*prompt := `### Instruction:
-	You are Report Comparing AI. You have to pick the best report for the primary goal.
+			// Define regular expressions for matching report types
+			reportARegex := regexp.MustCompile(`"best-report": "(A|Report A|ReportA|<A>|Report A with the addendum .*)`)
+			reportBRegex := regexp.MustCompile(`"best-report": "(B|Report B|ReportB|<B>)`)
+			reportBothRegex := regexp.MustCompile(`"best-report": "(A and B|A,B|<A,B>|<A, B>|<BOTH A and B>|both)"`)
 
-	Primary goal:
-	%s
-
-	Your task is to compare following two reports:
-	Report A:
-	%s
-
-	Report B:
-	%s
-
-	Please help to choose a report for further processing.
-	Which of the reports is more comprehensive and better aligns with the primary goal?
-	Provide response in the following JSON format:
-
-	%s
-	{
-	    "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
-	    "best-report": "<A|both|B>",
-	}
-	%s
-	### Assistant:
-	%s
-	`
-		prompt = fmt.Sprintf(prompt, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```", "```json")*/
-	// "updated-report": "full text of the updated and expanded report has been revised,\nfree from the shortcomings previously found and with correct usage of\nnext line symbol"
-	parsedResponse := modelResponse{}
-
-	minResults := 3
-	resultsToRequest := 0
-retry:
-	resultsToRequest += minResults
-	response, err := him.Client.RunRequest(&cmds.ClientRequest{
-		ProcessName: "final-reports-processor",
-		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
-			RawPrompt:   prompt.DefString(),
-			MinResults:  resultsToRequest,
-			Temperature: 0.9,
-		}, minResults),
-	}, 600*time.Second, os_client.REP_Default)
-	if err != nil {
-		him.Printf("Error getting response, going to retry")
-		goto retry
-	}
-
-	votesA := 0
-	votesB := 0
-	resultsProcessed := 0
-	//goodChoice := ""
-	choices := tools.FlattenChoices(response.GetCompletionResponse)
-	if len(choices) > resultsToRequest {
-		resultsToRequest = len(choices) + 1
-	}
-	for _, choice := range tools.FlattenChoices(response.GetCompletionResponse) {
-		choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
-		if isStringContains(choice, []string{
-			`"best-report": "A|B"`,
-			`best-report": "A and B"`,
-			`best-report": "A, B"`,
-			`best-report": "<A|B>"`,
-			`best-report": "<A,B>"`,
-			`best-report": "<A, B>"`,
-			`best-report": "<B|A>"`,
-			`best-report": "<BOTH A and B>"`,
-			`best-report": "both"`,
-		}) {
-			if len(a) < len(b) {
-				votesA++
-			} else {
-				votesB++
-			}
-			resultsProcessed++
-			continue
-		} else if isStringContains(choice, []string{
-			`"best-report": "A"`,
-			`"best-report": "Report A"`,
-			`"best-report": "ReportA"`,
-			`"best-report": "<A>"`,
-			`"best-report": "Report A with the addendum of having the detailed information about the restaurants as displayed in report B."`,
-		}) {
-			parsedResponse.BestReport = "A"
-			//parsedResponse.Thoughts = ""
-		} else if isStringContains(choice, []string{
-			`"best-report": "B"`,
-			`"best-report": "Report B"`,
-			`"best-report": "ReportB"`,
-			`"best-report": "<B>"`}) {
-			parsedResponse.BestReport = "B"
-			//parsedResponse.Thoughts = ""
-		} else {
-			err := tools.ParseJSON(choice, func(s string) error {
-				return json.Unmarshal([]byte(s), &parsedResponse)
-			})
-			_ = os.WriteFile("/tmp/final-report-vote.txt", []byte(fmt.Sprintf(`
+			parsedResponse := modelResponse{}
+			// Process the choice
+			var err error
+			switch {
+			case reportBothRegex.MatchString(choice):
+				parsedResponse.BestReport = "X"
+			case reportARegex.MatchString(choice):
+				parsedResponse.BestReport = "A"
+			case reportBRegex.MatchString(choice):
+				parsedResponse.BestReport = "B"
+			default:
+				err = json.Unmarshal([]byte(choice), &parsedResponse)
+				if err != nil {
+					// Handle error and continue
+					atomic.AddUint64(&errCounter, 1)
+					_ = os.WriteFile("/tmp/final-report-vote.txt", []byte(fmt.Sprintf(`
 Current choice is (total errors = %d, parse error = %v):
 %s
-`, atomic.AddUint64(&errCounter, 1), err, choice)), 0644)
-			if err != nil {
-				continue
+`, errCounter, err, choice)), 0644)
+					return err
+				}
 			}
-		}
 
-		if parsedResponse.BestReport == "A" || strings.HasPrefix(parsedResponse.BestReport, "A_") {
-			votesA++
-			resultsProcessed++
-		} else if parsedResponse.BestReport == "B" || strings.HasPrefix(parsedResponse.BestReport, "B_") {
-			votesB++
-			resultsProcessed++
-		} else {
-			if len(a) < len(b) {
-				votesA++
-				resultsProcessed++
-			} else {
-				votesB++
-				resultsProcessed++
+			// Update votes based on parsed response
+			switch {
+			case strings.HasPrefix(parsedResponse.BestReport, "A"):
+				atomic.AddUint64(&votesA, 1)
+			case strings.HasPrefix(parsedResponse.BestReport, "B"):
+				atomic.AddUint64(&votesB, 1)
+			default:
+				if len(a) < len(b) {
+					atomic.AddUint64(&votesA, 1)
+				} else {
+					atomic.AddUint64(&votesB, 1)
+				}
 			}
-		}
-	}
 
-	if resultsProcessed < minResults {
-		resultsToRequest++
-		him.Printf("Got not enough results (%d/%d), going to retry\n", resultsProcessed,
-			len(response.GetCompletionResponse[0].Choices))
-		if len(response.GetCompletionResponse[0].Choices) > 15 {
-			return false, fmt.Errorf("error getting parsable response")
-		}
-		goto retry
-	}
+			atomic.AddUint64(&resultsProcessed, 1)
+			return nil
+		}).Run(os_client.REP_IO)
 
-	him.Printf("Got enough results (%d/%d) [%d vs %d]\n",
+	him.Printf("Got enough results (%d/%d) [%d vs %d] (err=%v)\n",
 		resultsProcessed,
-		len(response.GetCompletionResponse),
-		votesA, votesB)
+		resultsAttempted,
+		votesA, votesB,
+		err)
 
-	return votesA > votesB, nil
+	return votesA > votesB, err
 }
 
 func (him *HIM) generateUpdatedReport(goal, a, b string) []string {

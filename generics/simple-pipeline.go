@@ -56,6 +56,7 @@ type SimplePipeline struct {
 	MinParsableResults      int
 	ResultsProcessor        map[string]func(string) error
 	Client                  *os_client.AgentOSClient
+	FullResultProcessor     func(string) error
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
@@ -90,7 +91,7 @@ func (p *SimplePipeline) WithAssistantResponsePrefixOnStepNo(stepNo int, prefix 
 	return p
 }
 
-func (p *SimplePipeline) AddResponseFields(key string, value string) *SimplePipeline {
+func (p *SimplePipeline) WithResponseField(key string, value string) *SimplePipeline {
 	p.ResponseFields = append(p.ResponseFields, tools.MapKV{Key: key, Value: value})
 	return p
 }
@@ -102,6 +103,11 @@ func (p *SimplePipeline) WithMinParsableResults(minParsableResults int) *SimpleP
 
 func (p *SimplePipeline) WithResultsProcessor(key string, processor func(string) error) *SimplePipeline {
 	p.ResultsProcessor[key] = processor
+	return p
+}
+
+func (p *SimplePipeline) WithFullResultProcessor(processor func(string) error) *SimplePipeline {
+	p.FullResultProcessor = processor
 	return p
 }
 
@@ -147,18 +153,23 @@ retry:
 	for _, choice := range choices {
 		var parsedValue string
 		if err := tools.ParseJSON(choice, func(s string) error {
-			for _, req := range p.ResponseFields {
-				parsedValue = gjson.Get(s, req.Key).String()
-				if parsedValue == "" {
-					return fmt.Errorf("no value parsed")
-				}
+			if p.FullResultProcessor != nil {
+				return p.FullResultProcessor(s)
+			} else {
+				for _, req := range p.ResponseFields {
+					parsedValue = gjson.Get(s, req.Key).String()
+					if parsedValue == "" {
+						return fmt.Errorf("no value parsed")
+					}
 
-				if p.ResultsProcessor[req.Key] != nil {
-					if err := p.ResultsProcessor[req.Key](parsedValue); err != nil {
-						return err
+					if p.ResultsProcessor[req.Key] != nil {
+						if err := p.ResultsProcessor[req.Key](parsedValue); err != nil {
+							return err
+						}
 					}
 				}
 			}
+
 			return nil
 		}); err == nil {
 			okResults++
