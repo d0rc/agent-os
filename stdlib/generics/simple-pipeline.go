@@ -11,42 +11,6 @@ import (
 	"time"
 )
 
-/*
-   	yesCounter := uint64(0)
-
-   	CreateSimplePipeline().
-   		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
-   Primary goal:
-   {{goal}}
-
-   Your task is to compare following two reports:
-   Report A:
-   {{reportA}}
-
-   Report B:
-   {{reportB}}
-
-   Please help to choose a report for further processing.
-   Are these reports the same?`).
-   		WithVar("goal", goal).
-   		WithVar("reportA", codeBlock(a)).
-   		WithVar("reportB", codeBlock(b)).
-   		WithTemperature(0.1).
-   		WithAssistantResponsePrefixOnStepNo(1, "```json\n").
-   		AddResponseFields("thoughts", "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal").
-   		AddResponseFields("reports-are-equal", "<yes|no>").
-   		WithMinParsableResults(2).
-   		WithResultsProcessor("reports-are-equal", func(response string) error {
-   			if strings.ToLower(response) == "yes" {
-   				atomic.AddUint64(&yesCounter, 1)
-   			}
-
-   			return nil
-   		})
-
-   	return yesCounter > 0, nil
-*/
-
 type SimplePipeline struct {
 	SystemMessage           string
 	Vars                    map[string]interface{}
@@ -129,11 +93,12 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 		jsonBuffer.String())
 
 	minResults := p.MinParsableResults
+	parsedChoices := make(map[string]struct{})
 retry:
 	response, err := p.Client.RunRequest(&cmds.ClientRequest{
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
-				RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).String(tools.PSAlpaca),
+				RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).DefString(),
 				Temperature: p.Temperature,
 				MinResults:  minResults,
 			},
@@ -151,6 +116,11 @@ retry:
 
 	okResults := 0
 	for _, choice := range choices {
+		if _, exists := parsedChoices[choice]; exists {
+			continue
+		}
+		parsedChoices[choice] = struct{}{}
+
 		var parsedValue string
 		if err := tools.ParseJSON(choice, func(s string) error {
 			if p.FullResultProcessor != nil {

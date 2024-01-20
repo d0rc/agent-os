@@ -273,8 +273,10 @@ func (him *HIM) finalReportsMaker() {
 }
 
 func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, error) {
-	prompt := `### Instruction:
-You are Report Comparing AI. You have to pick the best report for the primary goal.
+	yesCounter := uint64(0)
+	locker := sync.RWMutex{}
+	err := generics.CreateSimplePipeline(client).
+		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
 %s
@@ -287,52 +289,28 @@ Report B:
 %s
 
 Please help to choose a report for further processing.
-Are these reports the same?
-Provide response in the following JSON format:
-
-%s
-{
-    "thoughts": "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal",
-    "reports-are-equal": "<yes|no>",
-}
-%s
-
-### Assistant: 
-%s
-`
-	type yesNoResponse struct {
-		Thoughts        string `json:"thoughts"`
-		ReportsAreEqual string `json:"reports-are-equal"`
-	}
-	parsedResponse := yesNoResponse{}
-	prompt = fmt.Sprintf(prompt, tools.CodeBlock(goal), tools.CodeBlock(a), tools.CodeBlock(b), "```json", "```", "```json")
-	minResults := 3
-	resultsToRequest := 0
-retry:
-	resultsToRequest += minResults
-	response, err := client.RunRequest(&cmds.ClientRequest{
-		ProcessName: "final-reports-processor",
-		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
-			RawPrompt:   prompt,
-			MinResults:  resultsToRequest,
-			Temperature: 0.1,
-		}, minResults),
-	}, 600*time.Second, os_client.REP_Default)
-	if err != nil {
-		fmt.Printf("Error getting response, going to retry")
-		goto retry
-	}
-
-	yesCounter := 0
-	for _, choice := range tools.FlattenChoices(response.GetCompletionResponse) {
-		err := tools.ParseJSON(choice, func(s string) error {
-			return json.Unmarshal([]byte(s), &parsedResponse)
-		})
-		if err == nil {
-			if parsedResponse.ReportsAreEqual == "yes" {
+Are these reports the same?`).
+		WithVar("goal", tools.CodeBlock(goal)).
+		WithVar("repA", tools.CodeBlock(a)).
+		WithVar("repB", tools.CodeBlock(b)).
+		WithResponseField("thoughts", "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal").
+		WithResponseField("reports-are-equal", "<yes|no>").
+		WithResultsProcessor("reports-are-equal", func(choice string) error {
+			if choice == "yes" {
+				locker.Lock()
 				yesCounter++
+				locker.Unlock()
+				return nil
+			} else if choice == "no" {
+				return nil
 			}
-		}
+
+			return fmt.Errorf("invalid choice")
+		}).
+		Run(os_client.REP_IO)
+
+	if err != nil {
+		return false, err
 	}
 
 	if yesCounter >= 2 {
