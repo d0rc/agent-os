@@ -2,15 +2,15 @@ package cmds
 
 import (
 	"encoding/json"
-	borrowengine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/server"
-	"github.com/d0rc/agent-os/storage"
+	"github.com/d0rc/agent-os/stdlib/storage"
+	be "github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
 	"github.com/d0rc/agent-os/vectors"
 	"time"
 )
 
-func ProcessGetEmbeddings(request []GetEmbeddingsRequest, ctx *server.Context, process string, priority borrowengine.JobPriority) (response *ServerResponse, err error) {
+func ProcessGetEmbeddings(request []GetEmbeddingsRequest, ctx *server.Context, process string, priority be.JobPriority) (response *ServerResponse, err error) {
 	// I've found no evidence that vLLM supports batching for real
 	// so, we can just launch parallel processing now
 	// later comment: and it's not the right place to make automatic batching...:)
@@ -48,7 +48,7 @@ type EmbeddingsCacheRecord struct {
 	Embedding   []byte `db:"embedding"`
 }
 
-func processGetEmbeddings(cr GetEmbeddingsRequest, ctx *server.Context, process string, priority borrowengine.JobPriority) (*GetEmbeddingsResponse, error) {
+func processGetEmbeddings(cr GetEmbeddingsRequest, ctx *server.Context, process string, priority be.JobPriority) (*GetEmbeddingsResponse, error) {
 	cachedResponse := make([]EmbeddingsCacheRecord, 0, 1)
 	textHash := storage.GetHash(cr.RawPrompt)
 	retryCounter := 0
@@ -93,7 +93,7 @@ retryLoop:
 	// let's try to generate them
 	computeResult := SendComputeRequest(ctx,
 		process,
-		borrowengine.JT_Embeddings,
+		be.JT_Embeddings,
 		priority,
 		&engines.GenerationSettings{
 			RawPrompt: cr.RawPrompt,

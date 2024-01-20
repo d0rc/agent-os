@@ -5,30 +5,33 @@ import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/logrusorgru/aurora"
 	"net/url"
 	"os"
 	"sync"
-	"time"
 )
 
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
 	for resIdx, res := range results {
-		parsedResults, parsedString, err := agentState.ParseResponse(res.Content)
+		parsedResults, parsedString, reconstructedParsedJson, err := agentState.ParseResponse(res.Content)
 		if err != nil {
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 
 		// let's go to cross roads here, to see if we should dive deeper here
-		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), parsedString)
+		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), reconstructedParsedJson)
 		if err != nil {
 			fmt.Printf("Error voting for action: %v\n", err)
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 		if voteRating < MinimalVotingRatingForCommand {
 			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
+			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 
@@ -42,12 +45,17 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 			Content:  parsedString,
 		}
 		agentState.historyAppenderChannel <- correctedMessage
+		// get trajectoryId to which observations will go now...!
+		sourceTrajectoryId := message_store.TrajectoryID(keys(correctedMessage.ReplyTo)[0])
+		responseTrajectoryId, err := agentState.space.GetNextTrajectoryID(sourceTrajectoryId,
+			message_store.MessageID(msgId))
 
 		reactiveResultSink := func(msgId, content string) {
 			reactiveResponseId := engines.GenerateMessageId(content)
 			reactiveResponse := &engines.Message{
-				ID:       &reactiveResponseId,
-				ReplyTo:  map[string]struct{}{*correctedMessage.ID: {}},
+				ID: &reactiveResponseId,
+				//ReplyTo:  map[string]struct{}{*correctedMessage.ID: {}},
+				ReplyTo:  map[string]struct{}{string(responseTrajectoryId): {}},
 				MetaInfo: res.MetaInfo,
 				Role:     engines.ChatRoleUser,
 				Content:  content,
@@ -74,7 +82,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
 							agentState.getServerCommand(
-								*correctedMessage.ID,
+								string(responseTrajectoryId),
 								commandName,
 								argsData,
 								reactiveResultSink)...)
@@ -92,7 +100,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
 								agentState.getServerCommand(
-									*correctedMessage.ID,
+									string(responseTrajectoryId),
 									commandName,
 									argsData,
 									reactiveResultSink)...)
@@ -251,7 +259,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 		notesLock.Lock()
 		listAllNotesSubs = append(listAllNotesSubs, reactiveResultSink)
 		notesLock.Unlock()
-	case "final-report":
+	case "final-report", "periodic-report", "interim-report":
 		data := args["text"]
 		switch data.(type) {
 		case string:
@@ -260,10 +268,10 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 			} else {
 				// fmt.Printf("[%d] prey: %s\n", depth, aurora.BrightWhite(parsedResult.Value))
 				tools.RunLocalTTS("WARNING!!!!! I'm speaking!!!! " + data.(string))
-				appendFile("say.log", data.(string))
+				tools.AppendFile("say.log", data.(string))
 			}
 		}
-	case "hire-agent":
+	case "hire-agentx":
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
@@ -271,28 +279,30 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 				taskDescriptionInterface := args["task-description"]
 				if taskDescriptionInterface != nil {
 					var taskDescription string
-					taskDescription = taskDescriptionInterface.(string)
-					fmt.Printf("Hiring agent: %s, to execute task: %s\n",
-						aurora.BrightWhite(roleName),
-						aurora.BrightYellow(taskDescription))
-					go func(roleName, taskDescription, resultId string) {
+					taskDescription, ok := taskDescriptionInterface.(string)
+					if ok {
+						fmt.Printf("Hiring agent: %s, to execute task: %s\n",
+							aurora.BrightWhite(roleName),
+							aurora.BrightYellow(taskDescription))
+						go func(roleName, taskDescription, resultId string) {
 
-						for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
-							// we've got final report from our sub-agent
-							fmt.Printf("Got sub-agent's final report: %s\n", msg)
-							content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
-								roleName, msg)
-							contentMessageId := engines.GenerateMessageId(content)
-							appendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
-								roleName, taskDescription, msg))
-							agentState.historyAppenderChannel <- &engines.Message{
-								ID:      &contentMessageId,
-								ReplyTo: map[string]struct{}{resultId: {}},
-								Role:    engines.ChatRoleUser,
-								Content: content,
+							for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
+								// we've got final report from our sub-agent
+								fmt.Printf("Got sub-agent's final report: %s\n", msg)
+								content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
+									roleName, msg)
+								contentMessageId := engines.GenerateMessageId(content)
+								tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
+									roleName, taskDescription, msg))
+								agentState.historyAppenderChannel <- &engines.Message{
+									ID:      &contentMessageId,
+									ReplyTo: map[string]struct{}{resultId: {}},
+									Role:    engines.ChatRoleUser,
+									Content: content,
+								}
 							}
-						}
-					}(roleName, taskDescription, resultId)
+						}(roleName, taskDescription, resultId)
+					}
 				}
 			}
 		}
@@ -373,33 +383,4 @@ func listAllNotes() string {
 		notesList += fmt.Sprintf("- %s\n", section)
 	}
 	return notesList
-}
-
-var filesMap map[string]struct{} = make(map[string]struct{})
-var filesMapLock sync.RWMutex = sync.RWMutex{}
-
-func appendFile(fname string, text string) {
-	filesMapLock.Lock()
-	defer filesMapLock.Unlock()
-	_, exists := filesMap[fname]
-	if !exists {
-		filesMap[fname] = struct{}{}
-		// rename current file if it exists
-		if _, err := os.Stat(fname); err == nil {
-			_ = os.Rename(fname, fmt.Sprintf("%s.%d.old", fname, time.Now().Unix()))
-		}
-	}
-	// append to log file fname, create it if it doesn't exist
-	f, err := os.OpenFile(fname, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("failed opening file: %s\n", err)
-		return
-	}
-
-	defer f.Close()
-
-	if _, err := f.WriteString("--=== new report ===--\n" + text + "\n"); err != nil {
-		fmt.Printf("failed writing to file: %s\n", err)
-		return
-	}
 }

@@ -1,6 +1,8 @@
 package cmds
 
-import "github.com/d0rc/agent-os/server"
+import (
+	"github.com/d0rc/agent-os/syslib/server"
+)
 
 func ProcessSetCacheRecords(requests []SetCacheRecord, ctx *server.Context, process string) (response *ServerResponse, err error) {
 	var results = make([]*SetCacheRecordResponse, 0, len(requests))

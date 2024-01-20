@@ -3,11 +3,12 @@ package agency
 import (
 	"encoding/json"
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"github.com/d0rc/agent-os/tools"
+	"github.com/d0rc/agent-os/stdlib/os-client"
+	"github.com/d0rc/agent-os/stdlib/tools"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/tidwall/gjson"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +22,11 @@ var votesCache = make(map[string]float32)
 var votesCacheLock = sync.RWMutex{}
 
 func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription string) (float32, error) {
+	if strings.Contains(actionDescription, "final-report") ||
+		strings.Contains(actionDescription, "interim-report") {
+		return 10, nil
+	}
+
 	votesCacheLock.RLock()
 	if _, exists := votesCache[actionDescription]; exists {
 		voteValue := votesCache[actionDescription]
@@ -30,20 +36,22 @@ func (agentState *GeneralAgentInfo) VoteForAction(initialGoal, actionDescription
 	votesCacheLock.RUnlock()
 
 	question := "How likely is it that executing the command will lead to achieving the goal?"
-	systemMessage := `Given goal:
+	voterPrompt := tools.NewChatPrompt().
+		AddSystem(fmt.Sprintf(`Given goal:
 %s
 And a command:
 %s
+
 %s
 Respond in the JSON format:
 {
     "thought": "thought text, which provides critics of possible solutions",
     "criticism": "constructive self-criticism, question your assumptions",
     "feedback": "provide your feedback on the command and it's alignment to the purpose, suggest refinements here",
-    "rate": "rate probability on scale from 0 to 10"
-}`
+    "rate": "rate probability on scale from 1 to 5"
+}`, tools.CodeBlock(initialGoal), tools.CodeBlock(actionDescription), question)).
+		DefString()
 
-	systemMessage = fmt.Sprintf(systemMessage, "\n```\n"+initialGoal+"\n```\n", "\n```\n"+actionDescription+"\n```\n", question)
 	type votersResponse struct {
 		Thought   string      `json:"thought"`
 		Criticism string      `json:"criticism"`
@@ -56,13 +64,12 @@ retryVoting:
 	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
 		Priority:    borrow_engine.PRIO_User,
-		GetCompletionRequests: []cmds.GetCompletionRequest{
-			{
-				RawPrompt:  systemMessage,
+		GetCompletionRequests: tools.Replicate(
+			cmds.GetCompletionRequest{
+				RawPrompt:  voterPrompt,
 				MinResults: minResults,
-			},
-		},
-	}, 120*time.Second, os_client.REP_IO)
+			}, minResults),
+	}, 120*time.Second, os_client.REP_Default)
 	if err != nil {
 		return 0, fmt.Errorf("error running voters inference request: %w", err)
 	}
@@ -74,66 +81,81 @@ retryVoting:
 	currentRating := float32(0)
 	listOfRatings := make([]float32, 0)
 	numberOfVotes := 0
-	for _, getCompletionResponse := range serverResponse.GetCompletionResponse {
-		if getCompletionResponse == nil || getCompletionResponse.Choices == nil {
+	allChoices := tools.FlattenChoices(serverResponse.GetCompletionResponse)
+	for _, choice := range allChoices {
+		if choice == "" {
 			continue
 		}
+		var rateValue, thoughtsValue, criticismValue, feedbackValue string
+		var parsedVoteString string
+		if err := tools.ParseJSON(choice, func(s string) error {
+			rateValue = gjson.Get(choice, "rate").String()
+			thoughtsValue = gjson.Get(choice, "thought").String()
+			criticismValue = gjson.Get(choice, "criticism").String()
+			feedbackValue = gjson.Get(choice, "feedback").String()
 
-		for _, choice := range getCompletionResponse.Choices {
-			if choice == "" {
-				continue
-			}
-			currentVote := &votersResponse{}
-			var parsedVoteString string
-			if err := tools.ParseJSON(choice, func(s string) error {
-				parsedVoteString = s
-				return json.Unmarshal([]byte(s), currentVote)
-			}); err != nil {
-				fmt.Printf("error parsing voter's JSON: %s\n", err)
-				continue
-			}
-			var currentVoteRate float32
+			if rateValue == "" {
+				testFmt := []string{"\"rate\": \"%d\"", "\"rate\": %d", "\"rate\": \"%d.5\""}
+				for i := 0; i <= 5; i++ {
+					found := false
+					for _, test := range testFmt {
+						if strings.Contains(choice, fmt.Sprintf(test, i)) {
+							rateValue = strconv.Itoa(i)
+							found = true
+							break
+						}
+					}
 
-			switch currentVote.Rate.(type) {
-			case float32:
-				currentVoteRate = currentVote.Rate.(float32)
-			case float64:
-				currentVoteRate = float32(currentVote.Rate.(float64))
-			case string:
-				tmp, err := strconv.ParseFloat(currentVote.Rate.(string), 32)
-				if err != nil {
-					fmt.Printf("error parsing vote rate: %s\n", err)
-					continue
+					if found {
+						break
+					}
 				}
-				currentVoteRate = float32(tmp)
-			case int:
-				currentVoteRate = float32(currentVote.Rate.(int))
-			default:
-				fmt.Printf("Don't know what to do with vote rate: %v\n", currentVote.Rate)
-				continue
 			}
 
-			if WriteVotesLog {
-				appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
-					initialGoal,
-					strings.TrimSpace(actionDescription),
-					question,
-					strings.TrimSpace(parsedVoteString),
-					currentVoteRate,
-				))
-				exportVoterTrainingData(initialGoal, actionDescription, parsedVoteString, currentVoteRate)
+			if rateValue == "" {
+				return fmt.Errorf("no rateValue parsed: ```\n%s\n```", choice)
+			} else {
+				reconstructedBytes, _ := json.Marshal(&votersResponse{
+					Thought:   thoughtsValue,
+					Criticism: criticismValue,
+					Feedback:  feedbackValue,
+					Rate:      rateValue,
+				})
+				parsedVoteString = string(reconstructedBytes)
+				return nil
 			}
-			currentRating += currentVoteRate
-			numberOfVotes++
-			listOfRatings = append(listOfRatings, currentVoteRate)
+		}); err != nil {
+			fmt.Printf("error parsing voter's JSON: %s\n", err)
+			continue
 		}
+		var currentVoteRate float32
+		tmp, err := strconv.ParseFloat(rateValue, 32)
+		if err != nil {
+			fmt.Printf("error parsing vote rate: %s\n", err)
+			continue
+		}
+		currentVoteRate = float32(tmp)
+
+		if WriteVotesLog {
+			/*appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
+				initialGoal,
+				strings.TrimSpace(actionDescription),
+				question,
+				strings.TrimSpace(parsedVoteString),
+				currentVoteRate,
+			))*/
+			exportVoterTrainingData(agentState.SystemName, initialGoal, actionDescription, parsedVoteString, currentVoteRate)
+		}
+		currentRating += currentVoteRate
+		numberOfVotes++
+		listOfRatings = append(listOfRatings, currentVoteRate)
 	}
 
-	if minResults < len(serverResponse.GetCompletionResponse[0].Choices) {
-		minResults = len(serverResponse.GetCompletionResponse[0].Choices) + 1
+	if minResults < len(allChoices) {
+		minResults = len(allChoices) + 1
 	}
 
-	if numberOfVotes < MinimumNumberOfVotes && minResults < 50 {
+	if numberOfVotes < MinimumNumberOfVotes && minResults < 500 {
 		minResults += 5
 		goto retryVoting
 	}
@@ -167,20 +189,22 @@ retryVoting:
 	return finalRating, nil
 }
 
-func exportVoterTrainingData(goal string, description string, voteString string, rate float32) {
+func exportVoterTrainingData(agentName, goal string, description string, voteString string, rate float32) {
 	type voterTrainingDataRecord struct {
-		Goal   string  `json:"goal"`
-		Action string  `json:"action"`
-		Vote   string  `json:"vote"`
-		Rate   float32 `json:"rate"`
+		AgentName string  `json:"agent-name"`
+		Goal      string  `json:"goal"`
+		Action    string  `json:"action"`
+		Vote      string  `json:"vote"`
+		Rate      float32 `json:"rate"`
 	}
 
-	_ = os.MkdirAll("voter-training-data/", os.ModePerm)
+	_ = os.MkdirAll("../voter-training-data/", os.ModePerm)
 	data := voterTrainingDataRecord{
-		Goal:   goal,
-		Action: description,
-		Vote:   voteString,
-		Rate:   rate,
+		AgentName: agentName,
+		Goal:      goal,
+		Action:    description,
+		Vote:      voteString,
+		Rate:      rate,
 	}
 
 	jsonBytes, err := json.Marshal(data)
@@ -189,5 +213,5 @@ func exportVoterTrainingData(goal string, description string, voteString string,
 		return
 	}
 
-	_ = os.WriteFile(fmt.Sprintf("voter-training-data/%s.json", engines.GenerateMessageId(goal+description+voteString)), jsonBytes, os.ModePerm)
+	_ = os.WriteFile(fmt.Sprintf("../voter-training-data/%s.json", engines.GenerateMessageId(goal+description+voteString)), jsonBytes, os.ModePerm)
 }

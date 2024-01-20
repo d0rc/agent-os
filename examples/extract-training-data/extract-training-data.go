@@ -3,8 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/d0rc/agent-os/storage"
-	"github.com/d0rc/agent-os/utils"
+	"github.com/d0rc/agent-os/stdlib/storage"
+	"github.com/d0rc/agent-os/syslib/utils"
 	"github.com/logrusorgru/aurora"
 	zlog "github.com/rs/zerolog/log"
 	"strings"

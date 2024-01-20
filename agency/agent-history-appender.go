@@ -3,8 +3,8 @@ package agency
 import (
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"sync/atomic"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/os-client"
 	"time"
 )
 
@@ -15,34 +15,27 @@ func (agentState *GeneralAgentInfo) historyAppender() {
 		case <-agentState.quitHistoryAppender:
 			return
 		case message = <-agentState.historyAppenderChannel:
-			// let's see if message already in the History
-			messageId := message.ID
-			alreadyExists := false
-			for _, storedMessage := range agentState.History {
-				if *storedMessage.ID == *messageId {
-					//fmt.Printf("got message with ID %s already in history, merging replyTo maps\n", *messageId)
-					if storedMessage.Content != message.Content {
-						storedMessage.Content = message.Content // fatal error!
-					}
-					alreadyExists = true
-					for k, _ := range message.ReplyTo {
-						storedMessage.ReplyTo[k] = message.ReplyTo[k]
-					}
-				}
-			}
-			if !alreadyExists {
-				//fmt.Printf("Adding new message to history: %s\n", *messageId)
-				agentState.History = append(agentState.History, message)
-				atomic.AddInt32(&agentState.historySize, 1)
-			}
+			trajectoryId := message_store.TrajectoryID(keys(message.ReplyTo)[0])
+			_ = agentState.space.AddMessage(&trajectoryId, message)
 		case message = <-agentState.systemWriterChannel:
 		}
 		writeMessagesTrace(agentState, message)
 	}
 }
+
+func keys(to map[string]struct{}) []string {
+	result := make([]string, 0, len(to))
+	for k, _ := range to {
+		result = append(result, k)
+	}
+
+	return result
+}
 func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
-	_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
-		ProcessName:        agentState.SystemName,
-		WriteMessagesTrace: []*engines.Message{message},
-	}, 120*time.Second, os_client.REP_IO)
+	if ShouldWriteMessageTrace {
+		_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+			ProcessName:        agentState.SystemName,
+			WriteMessagesTrace: []*engines.Message{message},
+		}, 120*time.Second, os_client.REP_IO)
+	}
 }

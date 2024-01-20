@@ -1,10 +1,10 @@
 package cmds
 
 import (
-	"github.com/d0rc/agent-os/batcher"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/engines"
-	"github.com/d0rc/agent-os/server"
+	"github.com/d0rc/agent-os/syslib/batcher"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
 	"github.com/logrusorgru/aurora"
 	"time"
 )

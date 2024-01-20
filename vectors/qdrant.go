@@ -2,7 +2,7 @@ package vectors
 
 import (
 	"context"
-	"github.com/d0rc/agent-os/settings"
+	"github.com/d0rc/agent-os/stdlib/settings"
 	qdrantgo "github.com/henomis/qdrant-go"
 	"github.com/henomis/qdrant-go/request"
 	"github.com/henomis/qdrant-go/response"

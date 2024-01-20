@@ -5,12 +5,14 @@ import (
 	"flag"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
-	"github.com/d0rc/agent-os/metrics"
 	process_embeddings "github.com/d0rc/agent-os/process-embeddings"
-	"github.com/d0rc/agent-os/server"
-	"github.com/d0rc/agent-os/utils"
+	"github.com/d0rc/agent-os/stdlib/metrics"
+	"github.com/d0rc/agent-os/syslib/server"
+	"github.com/d0rc/agent-os/syslib/utils"
 	"io"
+	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"time"
 )
 
@@ -25,6 +27,10 @@ var topInterval = flag.Int("top-interval", 1000, "interval to update `top` (ms)"
 var termUi = flag.Bool("term-ui", true, "enable term ui")
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
+
 	lg, logChan := utils.ConsoleInit("ai-srv", termUi)
 
 	ctx, err := server.NewContext("config.yaml", lg, &server.Settings{
@@ -32,6 +38,10 @@ func main() {
 		TermUI:      *termUi,
 		LogChan:     logChan,
 	})
+
+	if err != nil {
+		log.Fatalf("failed to create context: %v", err)
+	}
 
 	go ctx.Start(func(ctx *server.Context) {
 		ctx.LaunchWorker("background{embeddings}", process_embeddings.BackgroundEmbeddingsWorker)
@@ -114,6 +124,10 @@ func processRequest(request *cmds.ClientRequest, ctx *server.Context) (*cmds.Ser
 
 	if request.WriteMessagesTrace != nil && len(request.WriteMessagesTrace) > 0 {
 		result, err = cmds.ProcessWriteMessagesTrace(request.ProcessName, request.WriteMessagesTrace, ctx, request.ProcessName)
+	}
+
+	if request.UIRequest != nil {
+		result, err = cmds.ProcessUIRequest(request.UIRequest, ctx)
 	}
 
 	if err != nil {

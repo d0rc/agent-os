@@ -3,10 +3,10 @@ package process_embeddings
 import (
 	"crypto/sha512"
 	"fmt"
-	borrow_engine "github.com/d0rc/agent-os/borrow-engine"
 	"github.com/d0rc/agent-os/cmds"
-	"github.com/d0rc/agent-os/server"
-	"github.com/d0rc/agent-os/settings"
+	"github.com/d0rc/agent-os/stdlib/settings"
+	"github.com/d0rc/agent-os/syslib/borrow-engine"
+	"github.com/d0rc/agent-os/syslib/server"
 	"github.com/d0rc/agent-os/vectors"
 	"github.com/google/uuid"
 	"github.com/rs/zerolog"

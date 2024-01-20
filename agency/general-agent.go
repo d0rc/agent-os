@@ -2,15 +2,15 @@ package agency
 
 import (
 	"fmt"
-	"strings"
+	"github.com/d0rc/agent-os/stdlib/message-store"
+	"github.com/d0rc/agent-os/stdlib/os-client"
+	"github.com/d0rc/agent-os/stdlib/tools"
 	"sync"
 	"time"
 
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
-	os_client "github.com/d0rc/agent-os/os-client"
-	"github.com/d0rc/agent-os/tools"
-	pongo2 "github.com/flosch/pongo2/v6"
+	"github.com/flosch/pongo2/v6"
 )
 
 type GeneralAgentInfo struct {
@@ -41,9 +41,15 @@ type GeneralAgentInfo struct {
 	jobsSubmittedTs    time.Time
 	jobsReceived       uint64
 	jobsFinished       uint64
+	historyUpdated     chan struct{}
+
+	waitLock          sync.Mutex
+	waitingResponseTo map[string]int
+
+	space *message_store.SemanticSpace
 }
 
-func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, error) {
+func (agentState *GeneralAgentInfo) ParseResponse(response string) ([]*ResponseParserResult, string, string, error) {
 	return agentState.Settings.ParseResponse(response)
 }
 
@@ -69,6 +75,7 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		quitChannelJobs:        make(chan struct{}, 1),
 		quitChannelResults:     make(chan struct{}, 1),
 		quitChannelProcessing:  make(chan struct{}, 1),
+		historyUpdated:         make(chan struct{}, 1),
 		//quitIoProcessing:         make(chan struct{}, 1),
 		quitHistoryAppender: make(chan struct{}, 1),
 		systemWriterChannel: make(chan *engines.Message, 100),
@@ -76,6 +83,17 @@ func NewGeneralAgentState(client *os_client.AgentOSClient, systemName string, co
 		terminalsVisitsMap: make(map[string]int),
 		terminalsVotesMap:  make(map[string]float32),
 		terminalsLock:      sync.RWMutex{},
+
+		ForkCallback:       nil,
+		FinalReportChannel: nil,
+		jobsSubmittedTs:    time.Now(),
+		jobsReceived:       0,
+		jobsFinished:       0,
+
+		waitLock:          sync.Mutex{},
+		waitingResponseTo: make(map[string]int),
+
+		space: message_store.NewSemanticSpace(3),
 	}
 
 	// copy all input variables from the config
@@ -155,22 +173,4 @@ func getChatSignature(chat []*engines.Message) string {
 	}
 
 	return signature
-}
-
-func chatToRawPrompt(sample []*engines.Message) string {
-	// following well known ### Instruction ### Assistant ### User format
-	rawPrompt := strings.Builder{}
-	for _, message := range sample {
-		switch message.Role {
-		case engines.ChatRoleSystem:
-			rawPrompt.WriteString(fmt.Sprintf("### Instruction:\n%s\n", message.Content))
-		case engines.ChatRoleAssistant:
-			rawPrompt.WriteString(fmt.Sprintf("### Assistant:\n%s\n", message.Content))
-		case engines.ChatRoleUser:
-			rawPrompt.WriteString(fmt.Sprintf("### User:\n%s\n", message.Content))
-		}
-	}
-	rawPrompt.WriteString("### Assistant:\n")
-
-	return rawPrompt.String()
 }

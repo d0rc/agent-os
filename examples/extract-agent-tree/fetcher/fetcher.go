@@ -1,7 +1,7 @@
 package fetcher
 
 import (
-	"github.com/d0rc/agent-os/storage"
+	"github.com/d0rc/agent-os/stdlib/storage"
 	"github.com/rs/zerolog"
 	"sync/atomic"
 	"time"

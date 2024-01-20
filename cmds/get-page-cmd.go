@@ -4,8 +4,7 @@ import (
 	"fmt"
 	md "github.com/JohannesKaufmann/html-to-markdown"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/d0rc/agent-os/server"
-	"github.com/logrusorgru/aurora"
+	"github.com/d0rc/agent-os/syslib/server"
 	"io"
 	"net/http"
 	"net/url"
@@ -169,8 +168,8 @@ func downloadPage(pr GetPageRequest, ctx *server.Context) (*PageCacheRecord, err
 		return nil, err
 	}
 
-	ctx.Log.Info().Msgf("Downloaded %s in %s\n",
-		aurora.Cyan(noLongerThen(pr.Url, 45)), aurora.BrightCyan(time.Since(ts)))
+	ctx.Log.Info().Msgf("Downloaded [%s](fg:cyan) in [%s](fg:cyan,mod:bold)\n",
+		noLongerThen(pr.Url, 45), time.Since(ts))
 	return &PageCacheRecord{
 		Id:         0,
 		Url:        pr.Url,
