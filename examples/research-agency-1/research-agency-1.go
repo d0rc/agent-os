@@ -30,7 +30,7 @@ var termUi = false
 var reportsProcessed = uint64(0)
 
 var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
-var startAgency = flag.Bool("start-agency", true, "start agency")
+var startAgency = flag.Bool("start-agency", false, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
 
 func main() {
@@ -276,6 +276,7 @@ func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, 
 	yesCounter := uint64(0)
 	locker := sync.RWMutex{}
 	err := generics.CreateSimplePipeline(client).
+		WithProcessName("him-equality-test").
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
@@ -414,6 +415,7 @@ func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
 	resultsAttempted := uint64(0)
 
 	err := generics.CreateSimplePipeline(him.Client).
+		WithProcessName("him-is-better-test").
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
@@ -514,7 +516,7 @@ Re-structure the draft above to make it easy to read and comprehend, don't miss 
 retryUpdatedReport:
 	minResults++
 	updatedReportResponse, err := him.Client.RunRequest(&cmds.ClientRequest{
-		ProcessName: "final-reports-processor",
+		ProcessName: "him-merger",
 		GetCompletionRequests: []cmds.GetCompletionRequest{
 			{
 				RawPrompt:   updatedReportQuery,
@@ -591,13 +593,4 @@ func removeDuplicates(options []string) []string {
 	}
 
 	return resultsSlice
-}
-
-func isStringContains(a string, b []string) bool {
-	for _, c := range b {
-		if strings.Contains(a, c) {
-			return true
-		}
-	}
-	return false
 }
