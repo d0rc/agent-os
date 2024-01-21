@@ -21,6 +21,7 @@ type SimplePipeline struct {
 	ResultsProcessor        map[string]func(string) error
 	Client                  *os_client.AgentOSClient
 	FullResultProcessor     func(string) error
+	ProcessName             string
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
@@ -37,6 +38,11 @@ func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
 
 func (p *SimplePipeline) WithSystemMessage(systemMessage string) *SimplePipeline {
 	p.SystemMessage = systemMessage
+	return p
+}
+
+func (p *SimplePipeline) WithProcessName(name string) *SimplePipeline {
+	p.ProcessName = name
 	return p
 }
 
@@ -94,27 +100,26 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 
 	minResults := p.MinParsableResults
 	parsedChoices := make(map[string]struct{})
+	okResults := 0
 retry:
 	response, err := p.Client.RunRequest(&cmds.ClientRequest{
-		GetCompletionRequests: []cmds.GetCompletionRequest{
-			{
-				RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).DefString(),
-				Temperature: p.Temperature,
-				MinResults:  minResults,
-			},
-		},
+		ProcessName: p.ProcessName,
+		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
+			RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).DefString(),
+			Temperature: p.Temperature,
+			MinResults:  minResults,
+		}, minResults),
 	}, 120*time.Second, executionPool)
 	if err != nil {
 		time.Sleep(100 * time.Millisecond)
 		goto retry
 	}
 
-	choices := tools.FlattenChoices(response.GetCompletionResponse)
+	choices := tools.DropDuplicates(tools.FlattenChoices(response.GetCompletionResponse))
 	if len(choices) > minResults {
 		minResults = len(choices) + 1
 	}
 
-	okResults := 0
 	for _, choice := range choices {
 		if _, exists := parsedChoices[choice]; exists {
 			continue
