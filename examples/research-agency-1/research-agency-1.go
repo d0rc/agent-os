@@ -26,9 +26,6 @@ import (
 	"time"
 )
 
-//go:embed agency.yaml
-var agencyYaml []byte
-
 var termUi = false
 
 var reportsProcessed = uint64(0)
@@ -36,11 +33,17 @@ var reportsProcessed = uint64(0)
 var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
 var startAgency = flag.Bool("start-agency", true, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
+var config = flag.String("agency-config", "agency.yaml", "path to agency config")
 
 func main() {
 	ts := time.Now()
 	lg, _ := utils.ConsoleInit("", &termUi)
 	lg.Info().Msg("starting research-agency-1")
+
+	agencyYaml, err := os.ReadFile(*config)
+	if err != nil {
+		lg.Fatal().Err(err).Msgf("failed to read agency config, path = `%s`", *config)
+	}
 
 	agencySettings, err := agency.ParseAgency(agencyYaml)
 	if err != nil {
@@ -458,11 +461,16 @@ func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStrea
 	stats, _ := getSizeAndEntropy(maxIdx, reports)
 
 	// create a string writer
-	sw := fmt.Sprintf(`
+	sep := "\n==================================================================================================\n"
+	allReports := strings.Join(reports, sep)
+	sw := fmt.Sprintf(`All reports:
+%s
+%s
+
 [HIM] Collection cycle: %d, compute cycles: %d, cycle breaks: %d, best of %d report, has score of %d, ratings map is: %v.
 [HIM] BestSize: %d, BestEntropy: %2.4f(bytes/symbol), AllSize: %d, AllEntropy: %2.4f(bytes/symbol).
 %s
-`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings,
+`, allReports, sep, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings,
 		stats.BestSize, stats.BestEntropy, stats.AllSize, stats.AllEntropy,
 		tools.CodeBlock(reports[maxIdx]))
 
