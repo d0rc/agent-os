@@ -137,14 +137,12 @@ retryVoting:
 		currentVoteRate = float32(tmp)
 
 		if WriteVotesLog {
-			/*appendFile("voting.log", fmt.Sprintf("\nStated goal: ```%s```\n\nAction description:\n```json\n%s\n```\n\nQuestion: ```%s```\nVoting result: \n```json\n%s\n```\nRating: %f\n\n",
+			exportVoterTrainingData(agentState.SystemName,
 				initialGoal,
-				strings.TrimSpace(actionDescription),
-				question,
-				strings.TrimSpace(parsedVoteString),
-				currentVoteRate,
-			))*/
-			exportVoterTrainingData(agentState.SystemName, initialGoal, actionDescription, parsedVoteString, currentVoteRate)
+				actionDescription,
+				parsedVoteString,
+				choice,
+				currentVoteRate)
 		}
 		currentRating += currentVoteRate
 		numberOfVotes++
@@ -167,44 +165,33 @@ retryVoting:
 
 	finalRating := currentRating / float32(numberOfVotes)
 
-	//fmt.Printf("Final rating: %f, number of votes: %d\n", finalRating, numberOfVotes)
-
 	if numberOfVotes >= NumberOfVotesToCache {
 		votesCacheLock.Lock()
 		votesCache[actionDescription] = finalRating
 		votesCacheLock.Unlock()
-
-		/*
-					_ = os.MkdirAll("action-voting-cache", os.ModePerm)
-					_ = os.WriteFile(fmt.Sprintf("action-voting-cache/%s.md",
-						engines.GenerateMessageId(systemMessage)), []byte(fmt.Sprintf(`UUID: %s
-			%s
-
-			Ratings: %v
-			`, engines.GenerateMessageId(systemMessage), systemMessage, listOfRatings)), os.ModePerm)
-
-		*/
 	}
 
 	return finalRating, nil
 }
 
-func exportVoterTrainingData(agentName, goal string, description string, voteString string, rate float32) {
+func exportVoterTrainingData(agentName, goal, description, voteString, choice string, rate float32) {
 	type voterTrainingDataRecord struct {
-		AgentName string  `json:"agent-name"`
-		Goal      string  `json:"goal"`
-		Action    string  `json:"action"`
-		Vote      string  `json:"vote"`
-		Rate      float32 `json:"rate"`
+		AgentName    string  `json:"agent-name"`
+		Goal         string  `json:"goal"`
+		Action       string  `json:"action"`
+		Vote         string  `json:"vote-parsed"`
+		VoteUnparsed string  `json:"vote-unparsed"`
+		Rate         float32 `json:"rate"`
 	}
 
 	_ = os.MkdirAll("../voter-training-data/", os.ModePerm)
 	data := voterTrainingDataRecord{
-		AgentName: agentName,
-		Goal:      goal,
-		Action:    description,
-		Vote:      voteString,
-		Rate:      rate,
+		AgentName:    agentName,
+		Goal:         goal,
+		Action:       description,
+		Vote:         voteString,
+		VoteUnparsed: choice,
+		Rate:         rate,
 	}
 
 	jsonBytes, err := json.Marshal(data)
