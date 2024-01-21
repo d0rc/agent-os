@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -13,9 +14,12 @@ import (
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/d0rc/agent-os/syslib/utils"
 	"github.com/logrusorgru/aurora"
+	"github.com/olekukonko/tablewriter"
+	"github.com/ulikunitz/xz"
 	"math/rand"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -102,19 +106,31 @@ func main() {
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
 		}
-		for _, report := range removeDuplicates(storedReports) {
+		for _, report := range tools.DropDuplicates(storedReports) {
 			finalReportsStream <- report
 		}
 	}
 
 	maxHims := 10
 	outputChannel := make(chan string)
+	statsChannel := make(chan *HIMStats)
+
+	go func(statsChannel chan *HIMStats) {
+		statistics := make(map[string]*HIMStats)
+		for stat := range statsChannel {
+			statistics[stat.Id] = stat
+
+			writeTable("him-stats.txt", statistics)
+		}
+	}(statsChannel)
+
 	initialHim := &HIM{
 		Id:                       fmt.Sprintf("him%03d", 0),
 		InputFinalReportsStream:  finalReportsStream,
 		OutputFinalReportsStream: outputChannel,
 		ContextGoal:              agentState.InputVariables["goal"].(string),
 		Client:                   client,
+		Reports:                  statsChannel,
 	}
 	hims := []*HIM{initialHim}
 
@@ -140,6 +156,7 @@ func main() {
 					OutputFinalReportsStream: outputChannel,
 					ContextGoal:              agentState.InputVariables["goal"].(string),
 					Client:                   client,
+					Reports:                  statsChannel,
 				}
 
 				go func(him *HIM) {
@@ -172,6 +189,7 @@ type HIM struct {
 	ComputeCycles            int
 	CycleBreaks              int
 	Busy                     bool
+	Reports                  chan *HIMStats
 }
 
 func (him *HIM) Printf(sfmt string, args ...interface{}) {
@@ -183,7 +201,7 @@ func (him *HIM) finalReportsMaker() {
 	for finalReport := range him.InputFinalReportsStream {
 		him.CollectionCycle++
 		finalReport = strings.TrimSpace(finalReport)
-		finalReports = removeDuplicates(append(finalReports, finalReport))
+		finalReports = tools.DropDuplicates(append(finalReports, finalReport))
 
 		cycle := 0
 		initialNumberOfReports := len(finalReports)
@@ -252,13 +270,13 @@ func (him *HIM) finalReportsMaker() {
 			wg.Wait()
 
 			if len(chunksProcessingResults) > 0 {
-				finalReports = removeDuplicates(chunksProcessingResults)
+				finalReports = tools.DropDuplicates(chunksProcessingResults)
 			}
 
 			him.Printf("Got %d reports, after merge phase\n", len(finalReports))
 
 			newFinalReports, ratings := him.naiveComparator(finalReports)
-			newFinalReports = removeDuplicates(newFinalReports)
+			newFinalReports = tools.DropDuplicates(newFinalReports)
 
 			him.Printf("Got %d reports, after compare phase\n", len(newFinalReports))
 
@@ -280,21 +298,21 @@ func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, 
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
-%s
+{{goal}}
 
 Your task is to compare following two reports:
 Report A:
-%s
+{{repA}}
 
 Report B:
-%s
+{{repB}}
 
 Please help to choose a report for further processing.
 Are these reports the same?`).
 		WithVar("goal", tools.CodeBlock(goal)).
 		WithVar("repA", tools.CodeBlock(a)).
 		WithVar("repB", tools.CodeBlock(b)).
-		WithResponseField("thoughts", "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal").
+		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("reports-are-equal", "<yes|no>").
 		WithResultsProcessor("reports-are-equal", func(choice string) error {
 			if choice == "yes" {
@@ -378,6 +396,55 @@ func (him *HIM) naiveComparator(finalReports []string) ([]string, map[int]int) {
 	return newFinalReports, ratings
 }
 
+type HIMStats struct {
+	Id              string
+	CollectionCycle int
+	ComputeCycles   int
+	CycleBreaks     int
+	PoolSize        int
+	RatingsMap      string
+	BestSize        int
+	BestEntropy     float64
+	AllSize         int
+	AllEntropy      float64
+	BestReportIdx   int
+	AllReports      []string
+	BestReportScore int
+}
+
+func writeTable(fname string, statistics map[string]*HIMStats) {
+	buf := &strings.Builder{}
+	tw := tablewriter.NewWriter(buf)
+	tw.SetHeader([]string{"Id",
+		"CollectionCycle",
+		"ComputeCycles",
+		"CycleBreaks",
+		"PoolSize",
+		"RatingsMap",
+		"BestSize",
+		"BestEntropy",
+		"AllSize",
+		"AllEntropy",
+	})
+	for _, stat := range statistics {
+		tw.Append([]string{stat.Id,
+			strconv.Itoa(stat.CollectionCycle),
+			strconv.Itoa(stat.ComputeCycles),
+			strconv.Itoa(stat.CycleBreaks),
+			strconv.Itoa(stat.PoolSize),
+			stat.RatingsMap,
+			strconv.Itoa(stat.BestSize),
+			strconv.FormatFloat(stat.BestEntropy, 'f', 2, 64),
+			strconv.Itoa(stat.AllSize),
+			strconv.FormatFloat(stat.AllEntropy, 'f', 2, 64),
+		})
+	}
+
+	tw.Render()
+
+	_ = os.WriteFile(fname, []byte(buf.String()), 0644)
+}
+
 func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStream chan string) {
 	maxVal := ratings[0]
 	maxIdx := 0
@@ -387,17 +454,112 @@ func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStrea
 			maxIdx = idx
 		}
 	}
+
+	stats, _ := getSizeAndEntropy(maxIdx, reports)
+
 	// create a string writer
 	sw := fmt.Sprintf(`
-Collection cycle: %d, compute cycles: %d, cycle breaks: %d, best of %d report, has score of %d, ratings map is: %v:
+[HIM] Collection cycle: %d, compute cycles: %d, cycle breaks: %d, best of %d report, has score of %d, ratings map is: %v.
+[HIM] BestSize: %d, BestEntropy: %2.4f(bytes/symbol), AllSize: %d, AllEntropy: %2.4f(bytes/symbol).
 %s
-`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings, tools.CodeBlock(reports[maxIdx]))
-	info := fmt.Sprintf("Total reports: %d, reports selected: %d, final-reports-len: %d, queue len: %d\n",
-		atomic.LoadUint64(&reportsProcessed),
-		len(ratings),
-		len(reports),
-		len(reportsStream))
-	_ = os.WriteFile(fmt.Sprintf("reports-table-%s.txt", him.Id), []byte(info+sw), 0644)
+`, him.CollectionCycle, him.ComputeCycles, him.CycleBreaks, len(reports), maxVal, ratings,
+		stats.BestSize, stats.BestEntropy, stats.AllSize, stats.AllEntropy,
+		tools.CodeBlock(reports[maxIdx]))
+
+	himStats := &HIMStats{
+		Id:              him.Id,
+		CollectionCycle: him.CollectionCycle,
+		ComputeCycles:   him.ComputeCycles,
+		CycleBreaks:     him.CycleBreaks,
+		PoolSize:        len(reports),
+		RatingsMap:      fmt.Sprintf("%v", ratings),
+		BestSize:        stats.BestSize,
+		BestEntropy:     stats.BestEntropy,
+		AllSize:         stats.AllSize,
+		AllEntropy:      stats.AllEntropy,
+		BestReportIdx:   maxIdx,
+		BestReportScore: maxVal,
+		AllReports:      reports,
+	}
+
+	if him.Reports != nil {
+		him.Reports <- himStats
+	}
+
+	_ = os.WriteFile(fmt.Sprintf("reports-table-%s.txt", him.Id), []byte(sw), 0644)
+}
+
+func getSizeAndEntropy(best int, reports []string) (*struct {
+	BestSize    int
+	BestEntropy float64
+	AllSize     int
+	AllEntropy  float64
+}, error) {
+	bestSize := 0
+	bestEntropy := 0.0
+	allSize := 0
+	allEntropy := 0.0
+
+	allReportsBuilder := strings.Builder{}
+	for i, report := range reports {
+		allSize = allSize + len(report)
+		if i == best {
+			bestSize = len(report)
+		}
+		allReportsBuilder.WriteString(report)
+	}
+
+	xzCompressedBest, err := xzCompress(reports[best])
+	if err != nil {
+		return nil, err
+	}
+	xzCompressedAll, err := xzCompress(allReportsBuilder.String())
+	if err != nil {
+		return nil, nil
+	}
+
+	bestEntropy = float64(len(xzCompressedBest)) / float64(bestSize)
+	allEntropy = float64(len(xzCompressedAll)) / float64(allSize)
+
+	return &struct {
+		BestSize    int
+		BestEntropy float64
+		AllSize     int
+		AllEntropy  float64
+	}{
+		BestSize:    bestSize,
+		BestEntropy: bestEntropy,
+		AllSize:     allSize,
+		AllEntropy:  allEntropy,
+	}, nil
+}
+
+var lzmaDictCapExps = []uint{18, 20, 21, 22, 22, 23, 23, 24, 25, 26}
+
+func xzCompress(s string) ([]byte, error) {
+	var buf bytes.Buffer
+
+	// Configure the writer with maximum compression level
+	writer, err := xz.WriterConfig{
+		DictCap: 1 << lzmaDictCapExps[9],
+	}.NewWriter(&buf)
+
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = writer.Write([]byte(s))
+	if err != nil {
+		writer.Close()
+		return nil, err
+	}
+
+	err = writer.Close()
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 type modelResponse struct {
@@ -421,19 +583,19 @@ func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
 Primary goal:
 {{goal}}
 
-Your task is to compare following two reports:
+Your task is to compare the following two reports:
 Report A:
 {{repA}}
 
 Report B:
 {{repB}}
 
-Please help to choose a report for further processing.
+Please help me choose a report for further processing.
 Which of the reports is more comprehensive and better aligns with the primary goal?`).
 		WithVar("goal", goal).
 		WithVar("repA", a).
 		WithVar("repB", b).
-		WithResponseField("thoughts", "thoughts text, discussing which report is more comprehensive and better aligns with the primary goal").
+		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("best-report", "<A|both|B>").
 		WithFullResultProcessor(func(choice string) error {
 			atomic.AddUint64(&resultsAttempted, 1)
@@ -500,13 +662,13 @@ func (him *HIM) generateUpdatedReport(goal, a, b string) []string {
 Primary goal:
 %s
 
-Your task is to compare and merge if appropriate these drafts:
+Your task is to compare these drafts and merge them if necessary:
 
 %s
 %s
 
 Please focus only on the facts and disregard any secondary or ancillary comments and discussions that the field agents have included in the drafts.
-Re-structure the draft above to make it easy to read and comprehend, don't miss facts or entities in updated draft.
+Re-structure the draft above to make it easy to read and comprehend.  Don't miss or exclude any facts or anything else important.
 `,
 			tools.CodeBlock(goal),
 			tools.CodeBlock(a),
@@ -571,7 +733,7 @@ retryUpdatedReport:
 			}
 
 			// remove all duplicates
-			results := removeDuplicates(allOptions)
+			results := tools.DropDuplicates(allOptions)
 			if len(results) <= 2 {
 				return results
 			}
@@ -579,18 +741,4 @@ retryUpdatedReport:
 	}
 
 	return []string{a, b}
-}
-
-func removeDuplicates(options []string) []string {
-	results := make(map[string]struct{})
-	resultsSlice := make([]string, 0)
-	for _, option := range options {
-		option = strings.TrimSpace(option)
-		if _, ok := results[option]; !ok {
-			results[option] = struct{}{}
-			resultsSlice = append(resultsSlice, option)
-		}
-	}
-
-	return resultsSlice
 }

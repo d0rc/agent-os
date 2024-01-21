@@ -20,6 +20,7 @@ require (
 	github.com/serpapi/google-search-results-golang v0.0.0-20230616000151-95707d993dc6
 	github.com/shirou/gopsutil v3.21.11+incompatible
 	github.com/tidwall/gjson v1.17.0
+	github.com/ulikunitz/xz v0.5.11
 	github.com/unum-cloud/usearch/golang v0.0.0-20231126121226-c2463ca3a043
 	github.com/wbrown/gpt_bpe v0.0.0-20231031010312-68aa6416a4d9
 	github.com/xitongsys/parquet-go v1.6.2
