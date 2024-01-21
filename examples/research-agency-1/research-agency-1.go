@@ -30,7 +30,7 @@ var termUi = false
 var reportsProcessed = uint64(0)
 
 var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
-var startAgency = flag.Bool("start-agency", false, "start agency")
+var startAgency = flag.Bool("start-agency", true, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
 
 func main() {
