@@ -31,9 +31,11 @@ var termUi = false
 var reportsProcessed = uint64(0)
 
 var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
-var startAgency = flag.Bool("start-agency", true, "start agency")
+var startAgency = flag.Bool("start-agency", false, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
 var config = flag.String("agency-config", "agency.yaml", "path to agency config")
+var himHeads = flag.Int("him-heads", 1, "number of HIM-heads")
+var primaryAgentThreads = flag.Int("primary-agent-threads", 120, "number of threads for primary agent")
 
 func main() {
 	ts := time.Now()
@@ -80,7 +82,7 @@ func main() {
 	agentState.FinalReportChannel = finalReportsSink
 	//go agentState.ToTPipeline()
 	if *startAgency {
-		go agentState.SoTPipeline(3, 80, 80)
+		go agentState.SoTPipeline(3, *primaryAgentThreads, *primaryAgentThreads)
 	}
 
 	go func() {
@@ -109,70 +111,73 @@ func main() {
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
 		}
+		fmt.Printf("Got %d stored final reports\n", len(storedReports))
 		for _, report := range tools.DropDuplicates(storedReports) {
 			finalReportsStream <- report
 		}
 	}
 
-	maxHims := 10
+	maxHims := *himHeads
 	outputChannel := make(chan string)
-	statsChannel := make(chan *HIMStats)
+	if maxHims > 0 {
+		statsChannel := make(chan *HIMStats)
 
-	go func(statsChannel chan *HIMStats) {
-		statistics := make(map[string]*HIMStats)
-		for stat := range statsChannel {
-			statistics[stat.Id] = stat
+		go func(statsChannel chan *HIMStats) {
+			statistics := make(map[string]*HIMStats)
+			for stat := range statsChannel {
+				statistics[stat.Id] = stat
 
-			writeTable("him-stats.txt", statistics)
-		}
-	}(statsChannel)
-
-	initialHim := &HIM{
-		Id:                       fmt.Sprintf("him%03d", 0),
-		InputFinalReportsStream:  finalReportsStream,
-		OutputFinalReportsStream: outputChannel,
-		ContextGoal:              agentState.InputVariables["goal"].(string),
-		Client:                   client,
-		Reports:                  statsChannel,
-	}
-	hims := []*HIM{initialHim}
-
-	go func(him *HIM) {
-		him.finalReportsMaker()
-	}(initialHim)
-
-	for {
-		if len(hims) < maxHims {
-			allBusy := true
-			for _, him := range hims {
-				if !him.Busy {
-					allBusy = false
-					break
-				}
+				writeTable("him-stats.txt", statistics)
 			}
+		}(statsChannel)
 
-			if allBusy {
-				idx := len(hims)
-				him := &HIM{
-					Id:                       fmt.Sprintf("him%03d", idx),
-					InputFinalReportsStream:  finalReportsStream,
-					OutputFinalReportsStream: outputChannel,
-					ContextGoal:              agentState.InputVariables["goal"].(string),
-					Client:                   client,
-					Reports:                  statsChannel,
+		initialHim := &HIM{
+			Id:                       fmt.Sprintf("him%03d", 0),
+			InputFinalReportsStream:  finalReportsStream,
+			OutputFinalReportsStream: outputChannel,
+			ContextGoal:              agentState.InputVariables["goal"].(string),
+			Client:                   client,
+			Reports:                  statsChannel,
+		}
+		hims := []*HIM{initialHim}
+
+		go func(him *HIM) {
+			him.finalReportsMaker()
+		}(initialHim)
+
+		for {
+			if len(hims) < maxHims {
+				allBusy := true
+				for _, him := range hims {
+					if !him.Busy {
+						allBusy = false
+						break
+					}
 				}
 
-				go func(him *HIM) {
-					him.finalReportsMaker()
-				}(him)
+				if allBusy {
+					idx := len(hims)
+					him := &HIM{
+						Id:                       fmt.Sprintf("him%03d", idx),
+						InputFinalReportsStream:  finalReportsStream,
+						OutputFinalReportsStream: outputChannel,
+						ContextGoal:              agentState.InputVariables["goal"].(string),
+						Client:                   client,
+						Reports:                  statsChannel,
+					}
 
-				hims = append(hims, him)
+					go func(him *HIM) {
+						him.finalReportsMaker()
+					}(him)
+
+					hims = append(hims, him)
+				}
+			} else {
+				break
 			}
-		} else {
-			break
-		}
 
-		time.Sleep(50 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
+		}
 	}
 
 	for output := range outputChannel {
@@ -317,17 +322,17 @@ Are these reports the same?`).
 		WithVar("repB", tools.CodeBlock(b)).
 		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("reports-are-equal", "<yes|no>").
-		WithResultsProcessor("reports-are-equal", func(choice string) error {
+		WithResultsProcessor("reports-are-equal", func(choice string) (generics.ResultProcessingOutcome, error) {
 			if choice == "yes" {
 				locker.Lock()
 				yesCounter++
 				locker.Unlock()
-				return nil
+				return generics.RPOProcessed, nil
 			} else if choice == "no" {
-				return nil
+				return generics.RPOProcessed, nil
 			}
 
-			return fmt.Errorf("invalid choice")
+			return generics.RPOFailed, fmt.Errorf("invalid choice")
 		}).
 		Run(os_client.REP_IO)
 
@@ -605,7 +610,7 @@ Which of the reports is more comprehensive and better aligns with the primary go
 		WithVar("repB", b).
 		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("best-report", "<A|both|B>").
-		WithFullResultProcessor(func(choice string) error {
+		WithFullResultProcessor(func(choice string) (generics.ResultProcessingOutcome, error) {
 			atomic.AddUint64(&resultsAttempted, 1)
 			choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 
@@ -633,7 +638,7 @@ Which of the reports is more comprehensive and better aligns with the primary go
 Current choice is (total errors = %d, parse error = %v):
 %s
 `, errCounter, err, choice)), 0644)
-					return err
+					return generics.RPOFailed, err
 				}
 			}
 
@@ -652,7 +657,7 @@ Current choice is (total errors = %d, parse error = %v):
 			}
 
 			atomic.AddUint64(&resultsProcessed, 1)
-			return nil
+			return generics.RPOProcessed, nil
 		}).Run(os_client.REP_IO)
 
 	him.Printf("Got enough results (%d/%d) [%d vs %d] (err=%v)\n",
