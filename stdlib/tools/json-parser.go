@@ -2,12 +2,7 @@ package tools
 
 import (
 	"fmt"
-	"github.com/d0rc/agent-os/syslib/borrow-engine"
-	"github.com/d0rc/agent-os/syslib/server"
 	"strings"
-
-	"github.com/d0rc/agent-os/cmds"
-	zlog "github.com/rs/zerolog/log"
 )
 
 func ParseJSON(sourceData string, parser func(string) error) error {
@@ -35,14 +30,6 @@ func ParseJSON(sourceData string, parser func(string) error) error {
 	if err == nil {
 		return err
 	}
-
-	/*
-		for minPosition := 1; minPosition < len(sourceData)-1; minPosition++ {
-			err = actualParse(sourceData[minPosition-1:], parser)
-			if err == nil {
-				return nil
-			}
-		}*/
 
 	return err
 }
@@ -75,49 +62,4 @@ func actualParse(newSourceData string, parser func(string) error) error {
 	}
 
 	return fmt.Errorf("failed to parse json: %v", err)
-}
-
-func LLMJSONParser(text string, ctx *server.Context, model string, parser func(string) error) error {
-	prompt := fmt.Sprintf(`### Instruction
-Answer the question: Why this JSON is broken?
-
-%s
-
-Take  a deep breath, think step by step. Check all brackets in place, no extra-brackets, wrong escape symbols, extra formatting or punctuation, like "...." or other symbols coming from schema descriptions. Best way to ensure correctness is to try to rewrite JSON, while skipping formatting symbols, i.e. output minified version.
-### Assistant:`,
-		text)
-
-	// no, since we have prompt we can attempt to execute one more time
-	// and attempt parsing all returned variants, applying ParseJSON function
-	res, err := cmds.ProcessGetCompletions([]cmds.GetCompletionRequest{
-		{
-			Model:       model,
-			RawPrompt:   prompt,
-			Temperature: 0.5,
-			StopTokens:  []string{"###"},
-			MinResults:  100,
-		},
-	}, ctx, "json-fixer", borrow_engine.PRIO_User)
-	if err != nil {
-		zlog.Error().Err(err).Msgf("failed to get completions in json-fixer")
-		return err
-	}
-
-	for _, choice := range res.GetCompletionResponse[0].Choices {
-		err = ParseJSON(choice, parser)
-		if err == nil {
-			return nil
-		}
-	}
-
-	return err
-}
-
-func TwoStepJSONParser(text string, ctx *server.Context, model string, parser func(string) error) error {
-	err := ParseJSON(text, parser)
-	if err == nil {
-		return nil
-	}
-
-	return LLMJSONParser(text, ctx, model, parser)
 }

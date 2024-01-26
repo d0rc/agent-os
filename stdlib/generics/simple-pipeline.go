@@ -3,6 +3,8 @@ package generics
 import (
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/d0rc/agent-os/engines"
+	agent_tools "github.com/d0rc/agent-os/stdlib/agent-tools"
 	"github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/flosch/pongo2/v6"
@@ -11,6 +13,16 @@ import (
 	"time"
 )
 
+type ResultProcessingOutcome int
+
+const (
+	RPOFailed ResultProcessingOutcome = iota
+	RPOIgnored
+	RPOProcessed
+)
+
+type ResultsProcessingFunction func(string) (ResultProcessingOutcome, error)
+
 type SimplePipeline struct {
 	SystemMessage           string
 	Vars                    map[string]interface{}
@@ -18,10 +30,12 @@ type SimplePipeline struct {
 	AssistantResponsePrefix map[int]string
 	ResponseFields          []tools.MapKV
 	MinParsableResults      int
-	ResultsProcessor        map[string]func(string) error
+	ResultsProcessor        map[string]ResultsProcessingFunction
 	Client                  *os_client.AgentOSClient
-	FullResultProcessor     func(string) error
+	FullResultProcessor     ResultsProcessingFunction
 	ProcessName             string
+	Tools                   []agent_tools.AgentTool
+	History                 []*engines.Message
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
@@ -31,7 +45,7 @@ func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
 		ResponseFields:          make([]tools.MapKV, 0),
 		MinParsableResults:      2,
 		Temperature:             0.1,
-		ResultsProcessor:        make(map[string]func(string) error),
+		ResultsProcessor:        make(map[string]ResultsProcessingFunction),
 		Client:                  client,
 	}
 }
@@ -71,13 +85,18 @@ func (p *SimplePipeline) WithMinParsableResults(minParsableResults int) *SimpleP
 	return p
 }
 
-func (p *SimplePipeline) WithResultsProcessor(key string, processor func(string) error) *SimplePipeline {
+func (p *SimplePipeline) WithResultsProcessor(key string, processor ResultsProcessingFunction) *SimplePipeline {
 	p.ResultsProcessor[key] = processor
 	return p
 }
 
-func (p *SimplePipeline) WithFullResultProcessor(processor func(string) error) *SimplePipeline {
+func (p *SimplePipeline) WithFullResultProcessor(processor ResultsProcessingFunction) *SimplePipeline {
 	p.FullResultProcessor = processor
+	return p
+}
+
+func (p *SimplePipeline) WithTools(tools ...agent_tools.AgentTool) *SimplePipeline {
+	p.Tools = tools
 	return p
 }
 
@@ -95,17 +114,37 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 		return err
 	}
 
-	systemMessage = systemMessage + fmt.Sprintf("\nRespond in the following JSON format:\n```json%s```\n",
-		jsonBuffer.String())
+	if p.Tools != nil && len(p.Tools) > 0 {
+		if !strings.HasSuffix(systemMessage, "\n\n") {
+			if !strings.HasSuffix(systemMessage, "\n") {
+				systemMessage += "\n\n"
+			} else {
+				systemMessage += "\n"
+			}
+		}
+
+		systemMessage = systemMessage + agent_tools.GetContextDescription(p.Tools)
+	}
+
+	if len(p.ResponseFields) > 0 {
+		systemMessage = systemMessage + fmt.Sprintf("\nRespond in the following JSON format:\n```json%s```\n",
+			jsonBuffer.String())
+	}
 
 	minResults := p.MinParsableResults
 	parsedChoices := make(map[string]struct{})
 	okResults := 0
+
+	chatPrompt := tools.NewChatPrompt().AddSystem(systemMessage)
+	for _, msg := range p.History {
+		chatPrompt.AddMessage(msg)
+	}
+
 retry:
 	response, err := p.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: p.ProcessName,
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
-			RawPrompt:   tools.NewChatPrompt().AddSystem(systemMessage).DefString(),
+			RawPrompt:   chatPrompt.DefString(),
 			Temperature: p.Temperature,
 			MinResults:  minResults,
 		}, minResults),
@@ -127,10 +166,17 @@ retry:
 		parsedChoices[choice] = struct{}{}
 
 		var parsedValue string
-		if err := tools.ParseJSON(choice, func(s string) error {
-			if p.FullResultProcessor != nil {
-				return p.FullResultProcessor(s)
-			} else {
+		if p.FullResultProcessor != nil {
+			res, err := p.FullResultProcessor(choice)
+			if err == nil && res == RPOProcessed {
+				okResults++
+				continue
+			}
+		}
+
+		if len(p.ResultsProcessor) > 0 {
+			var result = RPOIgnored
+			err := tools.ParseJSON(choice, func(s string) error {
 				for _, req := range p.ResponseFields {
 					parsedValue = gjson.Get(s, req.Key).String()
 					if parsedValue == "" {
@@ -138,16 +184,22 @@ retry:
 					}
 
 					if p.ResultsProcessor[req.Key] != nil {
-						if err := p.ResultsProcessor[req.Key](parsedValue); err != nil {
+						res, err := p.ResultsProcessor[req.Key](parsedValue)
+						if err != nil && res == RPOFailed {
 							return err
+						}
+						if res == RPOProcessed {
+							result = res
+							return nil
 						}
 					}
 				}
-			}
 
-			return nil
-		}); err == nil {
-			okResults++
+				return nil
+			})
+			if err == nil && result == RPOProcessed {
+				okResults++
+			}
 		}
 	}
 
@@ -157,4 +209,19 @@ retry:
 	}
 
 	return nil
+}
+
+func (p *SimplePipeline) WithHistory(history []*engines.Message) *SimplePipeline {
+	p.History = history
+
+	return p
+}
+
+func (p *SimplePipeline) WithUserMessage(desc string) *SimplePipeline {
+	p.History = append(p.History, &engines.Message{
+		Role:    engines.ChatRoleUser,
+		Content: desc,
+	})
+
+	return p
 }

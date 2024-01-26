@@ -4,7 +4,7 @@ import os
 from collections import defaultdict
 
 # Directory containing your JSON files
-json_files_directory = 'voter-training-data/'
+json_files_directory = '../voter-training-data/'
 
 # Function to transform list of dicts into dict of lists
 def transform_to_dict_of_lists(data_list):
@@ -29,5 +29,5 @@ transformed_data = transform_to_dict_of_lists(data)
 dataset = Dataset.from_dict(transformed_data)
 
 # Push dataset to your Hugging Face account (replace 'your_dataset_name' with your desired dataset name)
-dataset.push_to_hub('onealeph0cc/voting-agents-dataset-2')
+dataset.push_to_hub('onealeph0cc/voting-agents-dataset-3')
 

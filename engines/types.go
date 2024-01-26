@@ -40,6 +40,15 @@ func (m *Message) RUnlock() {
 	m.lock.RUnlock()
 }
 
+func NewMessage(role ChatRole, content string) *Message {
+	id := GenerateMessageId(content)
+	return &Message{
+		ID:      &id,
+		Content: content,
+		Role:    role,
+	}
+}
+
 func GenerateMessageId(body string) string {
 	return uuid.NewHash(sha512.New(), uuid.Nil, []byte(body), 5).String()
 }

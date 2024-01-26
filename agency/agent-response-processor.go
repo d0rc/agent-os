@@ -271,7 +271,7 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 				tools.AppendFile("say.log", data.(string))
 			}
 		}
-	case "hire-agentx":
+	case "hire-agent":
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
