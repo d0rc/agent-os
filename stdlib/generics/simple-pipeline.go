@@ -8,8 +8,10 @@ import (
 	"github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/flosch/pongo2/v6"
+	"github.com/logrusorgru/aurora"
 	"github.com/tidwall/gjson"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -38,7 +40,7 @@ type SimplePipeline struct {
 	History                 []*engines.Message
 }
 
-func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
+func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimplePipeline {
 	return &SimplePipeline{
 		Vars:                    make(map[string]interface{}),
 		AssistantResponsePrefix: make(map[int]string),
@@ -47,6 +49,7 @@ func CreateSimplePipeline(client *os_client.AgentOSClient) *SimplePipeline {
 		Temperature:             0.1,
 		ResultsProcessor:        make(map[string]ResultsProcessingFunction),
 		Client:                  client,
+		ProcessName:             name,
 	}
 }
 
@@ -100,47 +103,63 @@ func (p *SimplePipeline) WithTools(tools ...agent_tools.AgentTool) *SimplePipeli
 	return p
 }
 
+var symbols = []string{
+	" | ",
+	" / ",
+	" - ",
+	" \\ ",
+	" / ",
+	" - ",
+	" \\ ",
+}
+var symbolIndex = uint64(0)
+
+func nextSymbol() string {
+	return symbols[int(atomic.AddUint64(&symbolIndex, 1)%uint64(len(symbols)))]
+}
+
 func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error {
-	tpl, err := pongo2.FromString(p.SystemMessage)
-	if err != nil {
-		return err
-	}
-
-	jsonBuffer := &strings.Builder{}
-	tools.RenderJsonString(p.ResponseFields, jsonBuffer, 0)
-
-	systemMessage, err := tpl.Execute(p.Vars)
-	if err != nil {
-		return err
-	}
-
-	if p.Tools != nil && len(p.Tools) > 0 {
-		if !strings.HasSuffix(systemMessage, "\n\n") {
-			if !strings.HasSuffix(systemMessage, "\n") {
-				systemMessage += "\n\n"
-			} else {
-				systemMessage += "\n"
-			}
-		}
-
-		systemMessage = systemMessage + agent_tools.GetContextDescription(p.Tools)
-	}
-
-	if len(p.ResponseFields) > 0 {
-		systemMessage = systemMessage + fmt.Sprintf("\nRespond in the following JSON format:\n```json%s```\n",
-			jsonBuffer.String())
-	}
-
 	minResults := p.MinParsableResults
 	parsedChoices := make(map[string]struct{})
 	okResults := 0
+
+	done := make(chan struct{})
+	cycle := 0
+	defer func() {
+		done <- struct{}{}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-time.After(time.Second * 1):
+				fmt.Printf("\r\033[K\r[%s] %s is thinking, current cycle: %d\r",
+					nextSymbol(),
+					aurora.BrightCyan(p.ProcessName),
+					cycle)
+			}
+		}
+	}()
+
+	var systemMessage string
+	var err error
+retry:
+	cycle++
+	if cycle >= 0 {
+		systemMessage, err = p.constructSystemMessage()
+		if err != nil {
+			return err
+		}
+		minResults = 128
+	}
 
 	chatPrompt := tools.NewChatPrompt().AddSystem(systemMessage)
 	for _, msg := range p.History {
 		chatPrompt.AddMessage(msg)
 	}
 
-retry:
 	response, err := p.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: p.ProcessName,
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
@@ -166,40 +185,36 @@ retry:
 		parsedChoices[choice] = struct{}{}
 
 		var parsedValue string
-		if p.FullResultProcessor != nil {
-			res, err := p.FullResultProcessor(choice)
-			if err == nil && res == RPOProcessed {
-				okResults++
-				continue
-			}
-		}
-
+		var result = RPOIgnored
+		var err error
 		if len(p.ResultsProcessor) > 0 {
-			var result = RPOIgnored
-			err := tools.ParseJSON(choice, func(s string) error {
+			err = tools.ParseJSON(choice, func(s string) error {
 				for _, req := range p.ResponseFields {
 					parsedValue = gjson.Get(s, req.Key).String()
-					if parsedValue == "" {
-						return fmt.Errorf("no value parsed")
-					}
 
 					if p.ResultsProcessor[req.Key] != nil {
 						res, err := p.ResultsProcessor[req.Key](parsedValue)
-						if err != nil && res == RPOFailed {
-							return err
+						if err != nil || res == RPOFailed {
+							return fmt.Errorf("processing error(res=%d): %v", res, err)
 						}
 						if res == RPOProcessed {
 							result = res
-							return nil
 						}
 					}
 				}
 
 				return nil
 			})
-			if err == nil && result == RPOProcessed {
+		}
+
+		if p.FullResultProcessor != nil {
+			res, err := p.FullResultProcessor(choice)
+			if err == nil && (res != RPOFailed) && (result != RPOFailed) && (res == RPOProcessed || result == RPOProcessed) {
 				okResults++
+				continue
 			}
+		} else if err == nil && result == RPOProcessed {
+			okResults++
 		}
 	}
 
@@ -209,6 +224,48 @@ retry:
 	}
 
 	return nil
+}
+
+func (p *SimplePipeline) constructSystemMessage() (string, error) {
+	var systemMessage = p.SystemMessage
+
+oneMoreSystemMessageFold:
+	tpl, err := pongo2.FromString(systemMessage)
+	if err != nil {
+		return "", err
+	}
+
+	jsonBuffer := &strings.Builder{}
+	tools.RenderJsonString(p.ResponseFields, jsonBuffer, 0)
+
+	p.Vars["timestamp"] = fmt.Sprintf("%v", time.Now())
+
+	systemMessage, err = tpl.Execute(p.Vars)
+	if err != nil {
+		return "", err
+	}
+
+	if strings.Contains(systemMessage, "{{") && strings.Contains(systemMessage, "}}") {
+		goto oneMoreSystemMessageFold
+	}
+
+	if p.Tools != nil && len(p.Tools) > 0 {
+		if !strings.HasSuffix(systemMessage, "\n\n") {
+			if !strings.HasSuffix(systemMessage, "\n") {
+				systemMessage += "\n\n"
+			} else {
+				systemMessage += "\n"
+			}
+		}
+
+		systemMessage = systemMessage + agent_tools.GetContextDescription(p.Tools)
+	}
+
+	if len(p.ResponseFields) > 0 {
+		systemMessage = systemMessage + fmt.Sprintf("\nRespond in the following JSON format:\n```json\n%s```\n",
+			jsonBuffer.String())
+	}
+	return systemMessage, nil
 }
 
 func (p *SimplePipeline) WithHistory(history []*engines.Message) *SimplePipeline {
