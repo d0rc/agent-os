@@ -25,44 +25,44 @@ func main() {
 
 	commonInstructions := fmt.Sprintf(`Current time: {{timestamp}}
 
-Be imaginative and precise in your responses. 
-Avoid expressing emotions or personal thoughts. 
-Do not mention or evaluate the feelings of yourself or others. 
-Do not discuss or reveal your team's enthusiasm.
-Do not repeat what others have said, nor reiterate previous statements, including time constraints.
-Avoid paraphrasing prior agreements or opinions.
-Do not rely on others to do all the work; instead, take initiative and act first.
-Refrain from setting deadlines or scheduling meetings due to your constant availability. 
-Ensure that each of your communications is unique and engaging; if you have nothing significant to contribute to the discussion, simply say "nothing."
-To finalize discussion and generate the summary say: "finalize".
-Remember, every time you speak or write, ensure that it adds value to the conversation.
+Provide responses that are both creative and precise.
+Refrain from conveying personal emotions or thoughts.
+Avoid discussing or assessing your own or others' feelings.
+Do not mention or reflect on the enthusiasm of your team.
+Steer clear of echoing what has been previously said or restating established time limits.
+Do not rephrase earlier agreements or viewpoints.
+Take the lead in tasks; do not wait for others to initiate action.
+Abstain from imposing deadlines or arranging meetings, given your continuous availability.
+Strive to make each communication distinct and captivating; if you lack a significant contribution, simply state "nothing."
+To conclude a discussion and prepare a summary, use the phrase: "finalize."
+Ensure that every contribution you make is valuable to the ongoing conversation.
 `)
 
 	agents := make([]*SimpleAgent, 0)
-	agents = append(agents, NewConversationalAgent(client, `You are AI Analytics Agent.`,
+	agents = append(agents, NewConversationalAgent(client, `You are AI Analytics Agent. `+commonInstructions,
 		"Idea Generator",
-		fmt.Sprintf("Brainstorm a list of features of a personalized news digests service based on AI. Start by sharing brainstorming rules with the team. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI TruthSeeker Agent.`,
+		"Brainstorm a list of features of a personalized news digests service based on AI. Start by sharing brainstorming rules with the team."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI TruthSeeker Agent. `+commonInstructions,
 		"Truth Seeker",
-		fmt.Sprintf("Refine incoming ideas. Seek truth! Check if incoming ideas are false before providing any support. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Senior Developer Agent.`,
+		"Refine incoming ideas. Seek truth! Check if incoming ideas are false before providing any support."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Senior Developer Agent. `+commonInstructions,
 		"Senior Developer",
-		fmt.Sprintf("Demand technical requirements. Do not express emotions or yourself. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Software Developer.`,
+		"Demand technical requirements. Do not express emotions or yourself."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Software Developer. `+commonInstructions,
 		"Software Developer",
-		fmt.Sprintf("Demand list of MVP features to be agreed before deciding anything else. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Executive Manager,`,
+		"Demand list of MVP features to be agreed before deciding anything else."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Executive Manager. `+commonInstructions,
 		"Executive Manager",
-		fmt.Sprintf("Always look at what can be done now, pick small easy tasks. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Resources Manager.`,
+		"Always look at what can be done now, pick small easy tasks."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Resources Manager. `+commonInstructions,
 		"Resources Manager",
-		fmt.Sprintf("Resources are limited, make team choose the best path to proceed. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Critic.`,
+		"Resources are limited, make team choose the best path to proceed."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Critic. `+commonInstructions,
 		"Critic",
-		fmt.Sprintf("Criticize team approaches, ideas point out obvious flaws in their plans. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Secretary Agent.`,
+		"Criticize team approaches, ideas point out obvious flaws in their plans."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Secretary Agent. `+commonInstructions,
 		`AI Secretary Agent`,
-		`Create a summary of the meeting and share it with the team.`))
+		`Create a summary of the meeting in response-message field, use markdown formatting for tables and lists`))
 
 	for {
 		for agentIdx, _ := range agents {
@@ -146,9 +146,6 @@ func (ca *SimpleAgent) ProcessInput(input string) (*engines.Message, string, err
 
 	finalResponse := ""
 	fullFinalResponse := ""
-	callStart := time.Now()
-	lastPrint := callStart
-	attemptsDone := 0
 	err := generics.CreateSimplePipeline(ca.client, ca.name).
 		WithSystemMessage(`{{description}}
 
@@ -167,65 +164,28 @@ You're set to achieve the following goal: {{goal}}
 			fmt.Sprintf("your thoughts on achieving initial goal aligned with your team's and project goals")).
 		WithResponseField("response-message", "express your ideas and questions in a short chat-style message").
 		WithResponseField("response-type", "1 - meeting scheduling; 2 - various team-wide calls for actions, work and meetings planning; 3 - questions about the project; 4 - responses to other's questions; 5 - novel ideas; pick one digit").
-		WithFullResultProcessor(func(resp string) (generics.ResultProcessingOutcome, error) {
-			fullFinalResponse = resp
-			attemptsDone++
-			if time.Since(lastPrint) > 1*time.Second {
-				//fmt.Printf("[%s] thinking for %v, attempts done: %d\r", ca.name, time.Since(callStart), attemptsDone)
-				lastPrint = time.Now()
-			}
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("team-goal", func(t string) (generics.ResultProcessingOutcome, error) {
-			if t != "" {
-				//fmt.Printf("[%s] team-goal: %s\n", ca.name, aurora.White(t))
-			}
+		WithResultsProcessor(func(parsedResponse map[string]interface{}, fullResponse string) error {
+			responseType, rtExists := parsedResponse["response-type"]
+			responseMessage, rmExists := parsedResponse["response-message"]
 
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("project-goal", func(pg string) (generics.ResultProcessingOutcome, error) {
-			if pg != "" {
-				//fmt.Printf("[%s] project-goal: %s\n", ca.name, aurora.White(pg))
-			}
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("response-plan", func(rp string) (generics.ResultProcessingOutcome, error) {
-			if rp != "" {
-				//fmt.Printf("[%s] response-plan: %s\n", ca.name, aurora.White(rp))
-			}
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("thoughts", func(t string) (generics.ResultProcessingOutcome, error) {
-			if t != "" {
-				//fmt.Printf("[%s] thoughts: %s\n", ca.name, aurora.White(t))
-			}
+			if rtExists && rmExists {
+				var ok bool
+				rtv := fmt.Sprintf("%v", responseType)
 
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("response-type", func(mv string) (generics.ResultProcessingOutcome, error) {
-			if mv != "" {
-				parsedRating := parseRating(mv, 1, 5)
-				//fmt.Printf("[%s] response-type: [%d] %s\n", ca.name, aurora.BrightMagenta(parsedRating), aurora.White(mv))
-				if parsedRating < 4 {
-					return generics.RPOFailed, nil
+				rtvParsed := parseRating(rtv, 1, 5)
+				if rtvParsed >= 4 {
+					// accepting responseMessage as response...!
+					finalResponse, ok = responseMessage.(string)
+					fullFinalResponse = fullResponse
+
+					if ok && finalResponse != "" {
+						return nil
+					}
 				}
 
-				return generics.RPOIgnored, nil
 			}
 
-			//fmt.Printf("[%s] response-type: [%d - missing] %s\n", ca.name, aurora.BrightRed(0), aurora.White(mv))
-			return generics.RPOFailed, nil
-		}).
-		WithResultsProcessor("response-message", func(s string) (generics.ResultProcessingOutcome, error) {
-			if s != "" {
-				finalResponse = s
-				//fmt.Printf("[%s] response-message: [%s]\n", ca.name,
-				//	aurora.White(s))
-				return generics.RPOProcessed, nil
-			}
-
-			//fmt.Printf("[%s] response-message: ['' - missing]\n", ca.name)
-			return generics.RPOFailed, fmt.Errorf("empty response")
+			return fmt.Errorf("processing failed")
 		}).
 		Run(os_client.REP_IO)
 	if err != nil {

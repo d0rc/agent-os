@@ -1,6 +1,7 @@
 package generics
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
@@ -9,7 +10,6 @@ import (
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/flosch/pongo2/v6"
 	"github.com/logrusorgru/aurora"
-	"github.com/tidwall/gjson"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -17,27 +17,18 @@ import (
 
 type ResultProcessingOutcome int
 
-const (
-	RPOFailed ResultProcessingOutcome = iota
-	RPOIgnored
-	RPOProcessed
-)
-
-type ResultsProcessingFunction func(string) (ResultProcessingOutcome, error)
-
 type SimplePipeline struct {
-	SystemMessage           string
-	Vars                    map[string]interface{}
-	Temperature             float32
-	AssistantResponsePrefix map[int]string
-	ResponseFields          []tools.MapKV
-	MinParsableResults      int
-	ResultsProcessor        map[string]ResultsProcessingFunction
-	Client                  *os_client.AgentOSClient
-	FullResultProcessor     ResultsProcessingFunction
-	ProcessName             string
-	Tools                   []agent_tools.AgentTool
-	History                 []*engines.Message
+	SystemMessage               string
+	Vars                        map[string]interface{}
+	Temperature                 float32
+	AssistantResponsePrefix     map[int]string
+	ResponseFields              []tools.MapKV
+	MinParsableResults          int
+	Client                      *os_client.AgentOSClient
+	ProcessName                 string
+	Tools                       []agent_tools.AgentTool
+	History                     []*engines.Message
+	FullParsedResponseProcessor func(map[string]interface{}, string) error
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimplePipeline {
@@ -47,14 +38,21 @@ func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimpleP
 		ResponseFields:          make([]tools.MapKV, 0),
 		MinParsableResults:      2,
 		Temperature:             0.1,
-		ResultsProcessor:        make(map[string]ResultsProcessingFunction),
 		Client:                  client,
 		ProcessName:             name,
+		FullParsedResponseProcessor: func(m map[string]interface{}, s string) error {
+			return nil
+		},
 	}
 }
 
 func (p *SimplePipeline) WithSystemMessage(systemMessage string) *SimplePipeline {
 	p.SystemMessage = systemMessage
+	return p
+}
+
+func (p *SimplePipeline) WithResultsProcessor(processor func(map[string]interface{}, string) error) *SimplePipeline {
+	p.FullParsedResponseProcessor = processor
 	return p
 }
 
@@ -85,16 +83,6 @@ func (p *SimplePipeline) WithResponseField(key string, value string) *SimplePipe
 
 func (p *SimplePipeline) WithMinParsableResults(minParsableResults int) *SimplePipeline {
 	p.MinParsableResults = minParsableResults
-	return p
-}
-
-func (p *SimplePipeline) WithResultsProcessor(key string, processor ResultsProcessingFunction) *SimplePipeline {
-	p.ResultsProcessor[key] = processor
-	return p
-}
-
-func (p *SimplePipeline) WithFullResultProcessor(processor ResultsProcessingFunction) *SimplePipeline {
-	p.FullResultProcessor = processor
 	return p
 }
 
@@ -184,36 +172,18 @@ retry:
 		}
 		parsedChoices[choice] = struct{}{}
 
+		parsedResponse := make(map[string]interface{})
 		var parsedValue string
-		var result = RPOIgnored
-		var err error
-		if len(p.ResultsProcessor) > 0 {
-			err = tools.ParseJSON(choice, func(s string) error {
-				for _, req := range p.ResponseFields {
-					parsedValue = gjson.Get(s, req.Key).String()
-
-					if p.ResultsProcessor[req.Key] != nil {
-						res, err := p.ResultsProcessor[req.Key](parsedValue)
-						if err != nil || res == RPOFailed {
-							return fmt.Errorf("processing error(res=%d): %v", res, err)
-						}
-						if res == RPOProcessed {
-							result = res
-						}
-					}
-				}
-
-				return nil
-			})
+		if err = tools.ParseJSON(choice, func(s string) error {
+			parsedValue = s
+			return json.Unmarshal([]byte(s), &parsedResponse)
+		}); err != nil {
+			continue
 		}
 
-		if p.FullResultProcessor != nil {
-			res, err := p.FullResultProcessor(choice)
-			if err == nil && (res != RPOFailed) && (result != RPOFailed) && (res == RPOProcessed || result == RPOProcessed) {
-				okResults++
-				continue
-			}
-		} else if err == nil && result == RPOProcessed {
+		if err = p.FullParsedResponseProcessor(parsedResponse, parsedValue); err != nil {
+			// got error, processing response...!
+		} else {
 			okResults++
 		}
 	}
