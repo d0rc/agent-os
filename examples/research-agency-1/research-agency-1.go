@@ -321,17 +321,21 @@ Are these reports the same?`).
 		WithVar("repB", tools.CodeBlock(b)).
 		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("reports-are-equal", "<yes|no>").
-		WithResultsProcessor("reports-are-equal", func(choice string) (generics.ResultProcessingOutcome, error) {
-			if choice == "yes" {
-				locker.Lock()
-				yesCounter++
-				locker.Unlock()
-				return generics.RPOProcessed, nil
-			} else if choice == "no" {
-				return generics.RPOProcessed, nil
+		WithResultsProcessor(func(resp map[string]interface{}, choice string) error {
+			if v, exists := resp["reports-are-equal"]; exists {
+				if vString, ok := v.(string); ok {
+					if vString == "yes" {
+						locker.Lock()
+						yesCounter++
+						locker.Unlock()
+						return nil
+					}
+					if vString == "no" {
+						return nil
+					}
+				}
 			}
-
-			return generics.RPOFailed, fmt.Errorf("invalid choice")
+			return fmt.Errorf("invalid choice")
 		}).
 		Run(os_client.REP_IO)
 
@@ -608,7 +612,7 @@ Which of the reports is more comprehensive and better aligns with the primary go
 		WithVar("repB", b).
 		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
 		WithResponseField("best-report", "<A|both|B>").
-		WithFullResultProcessor(func(choice string) (generics.ResultProcessingOutcome, error) {
+		WithResultsProcessor(func(m map[string]interface{}, choice string) error {
 			atomic.AddUint64(&resultsAttempted, 1)
 			choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 
@@ -636,7 +640,7 @@ Which of the reports is more comprehensive and better aligns with the primary go
 Current choice is (total errors = %d, parse error = %v):
 %s
 `, errCounter, err, choice)), 0644)
-					return generics.RPOFailed, err
+					return err
 				}
 			}
 
@@ -655,7 +659,7 @@ Current choice is (total errors = %d, parse error = %v):
 			}
 
 			atomic.AddUint64(&resultsProcessed, 1)
-			return generics.RPOProcessed, nil
+			return nil
 		}).Run(os_client.REP_IO)
 
 	him.Printf("Got enough results (%d/%d) [%d vs %d] (err=%v)\n",

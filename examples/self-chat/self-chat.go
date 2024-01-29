@@ -23,7 +23,8 @@ func main() {
 
 	client := os_client.NewAgentOSClient(*agentOSUrl)
 
-	commonInstructions := fmt.Sprintf(`Current time: {{timestamp}}
+	commonInstructions := fmt.Sprintf(`You are an AI Agent, you name is {{name}}.
+Current time: {{timestamp}}
 
 Provide responses that are both creative and precise.
 Refrain from conveying personal emotions or thoughts.
@@ -39,28 +40,28 @@ Ensure that every contribution you make is valuable to the ongoing conversation.
 `)
 
 	agents := make([]*SimpleAgent, 0)
-	agents = append(agents, NewConversationalAgent(client, `You are AI Analytics Agent. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Idea Generator",
 		"Brainstorm a list of features of a personalized news digests service based on AI. Start by sharing brainstorming rules with the team."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI TruthSeeker Agent. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Truth Seeker",
 		"Refine incoming ideas. Seek truth! Check if incoming ideas are false before providing any support."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Senior Developer Agent. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Senior Developer",
 		"Demand technical requirements. Do not express emotions or yourself."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Software Developer. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Software Developer",
 		"Demand list of MVP features to be agreed before deciding anything else."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Executive Manager. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Executive Manager",
 		"Always look at what can be done now, pick small easy tasks."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Resources Manager. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Resources Manager",
 		"Resources are limited, make team choose the best path to proceed."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Critic. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		"Critic",
 		"Criticize team approaches, ideas point out obvious flaws in their plans."))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Secretary Agent. `+commonInstructions,
+	agents = append(agents, NewConversationalAgent(client, commonInstructions,
 		`AI Secretary Agent`,
 		`Create a summary of the meeting in response-message field, use markdown formatting for tables and lists`))
 
@@ -157,13 +158,13 @@ You're set to achieve the following goal: {{goal}}
 		WithTools(ca.tools...).
 		WithTemperature(1.0).
 		WithMinParsableResults(1).
-		WithResponseField("team-goal", "team goal at this point as you see it").
-		WithResponseField("project-goal", "current goal for the project").
-		WithResponseField("response-plan", "what team needs to hear from you, what you want to hear from the team").
+		WithResponseField("team-goal", "Define the team's current goal.").
+		WithResponseField("project-goal", "State the current project goal.").
+		WithResponseField("response-plan", "Outline what needs to be communicated to the team and what feedback is expected.").
 		WithResponseField("thoughts",
-			fmt.Sprintf("your thoughts on achieving initial goal aligned with your team's and project goals")).
-		WithResponseField("response-message", "express your ideas and questions in a short chat-style message").
-		WithResponseField("response-type", "1 - meeting scheduling; 2 - various team-wide calls for actions, work and meetings planning; 3 - questions about the project; 4 - responses to other's questions; 5 - novel ideas; pick one digit").
+			fmt.Sprintf("Provide thoughts on achieving the initial goal, aligned with team and project goals.")).
+		WithResponseField("response-message", "Deliver ideas and questions in a brief, chat-style message.").
+		WithResponseField("response-type", "Categorize the response type: 1 - meeting scheduling; 2 - team-wide calls for actions; 3 - project questions; 4 - feature lists and plans; 5 - novel ideas and implementation details.").
 		WithResultsProcessor(func(parsedResponse map[string]interface{}, fullResponse string) error {
 			responseType, rtExists := parsedResponse["response-type"]
 			responseMessage, rmExists := parsedResponse["response-message"]
