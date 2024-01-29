@@ -301,8 +301,7 @@ func (him *HIM) finalReportsMaker() {
 func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, error) {
 	yesCounter := uint64(0)
 	locker := sync.RWMutex{}
-	err := generics.CreateSimplePipeline(client).
-		WithProcessName("him-equality-test").
+	err := generics.CreateSimplePipeline(client, "him-equality-test").
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:
@@ -589,8 +588,7 @@ func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
 	resultsProcessed := uint64(0)
 	resultsAttempted := uint64(0)
 
-	err := generics.CreateSimplePipeline(him.Client).
-		WithProcessName("him-is-better-test").
+	err := generics.CreateSimplePipeline(him.Client, "him-is-better-test").
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
 
 Primary goal:

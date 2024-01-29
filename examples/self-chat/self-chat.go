@@ -9,7 +9,9 @@ import (
 	os_client "github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/syslib/utils"
 	"github.com/logrusorgru/aurora"
+	"strings"
 	"sync"
+	"time"
 )
 
 var termUi = false
@@ -17,34 +19,50 @@ var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os 
 
 func main() {
 	lg, _ := utils.ConsoleInit("", &termUi)
+	start := time.Now()
 
 	client := os_client.NewAgentOSClient(*agentOSUrl)
 
-	commonInstructions := `Be creative and specific. 
-Do not express emotions or yourself. 
-Do not reflect your or others emotions and feelings. 
-Don't reflect or share your or team's excitement.
-If you have nothing to add, just say "agreed"".`
+	commonInstructions := fmt.Sprintf(`Current time: {{timestamp}}
+
+Provide responses that are both creative and precise.
+Refrain from conveying personal emotions or thoughts.
+Avoid discussing or assessing your own or others' feelings.
+Do not mention or reflect on the enthusiasm of your team.
+Steer clear of echoing what has been previously said or restating established time limits.
+Do not rephrase earlier agreements or viewpoints.
+Take the lead in tasks; do not wait for others to initiate action.
+Abstain from imposing deadlines or arranging meetings, given your continuous availability.
+Strive to make each communication distinct and captivating; if you lack a significant contribution, simply state "nothing."
+To conclude a discussion and prepare a summary, use the phrase: "finalize."
+Ensure that every contribution you make is valuable to the ongoing conversation.
+`)
 
 	agents := make([]*SimpleAgent, 0)
-	agents = append(agents, NewConversationalAgent(client, `You are AI Analytics Agent.`,
+	agents = append(agents, NewConversationalAgent(client, `You are AI Analytics Agent. `+commonInstructions,
 		"Idea Generator",
-		fmt.Sprintf("Initiate and support a discussion on a feature list of an operating system for AI Agents' enviroments. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI TruthSeeker Agent.`,
+		"Brainstorm a list of features of a personalized news digests service based on AI. Start by sharing brainstorming rules with the team."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI TruthSeeker Agent. `+commonInstructions,
 		"Truth Seeker",
-		fmt.Sprintf("Refine incoming ideas. Seek truth! Check if incoming ideas are false before providing any support. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI CTO Agent.`,
-		"CTO",
-		fmt.Sprintf("Demand technical requirements. Do not express emotions or yourself. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `You are AI Software Developer.`,
+		"Refine incoming ideas. Seek truth! Check if incoming ideas are false before providing any support."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Senior Developer Agent. `+commonInstructions,
+		"Senior Developer",
+		"Demand technical requirements. Do not express emotions or yourself."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Software Developer. `+commonInstructions,
 		"Software Developer",
-		fmt.Sprintf("Demand list of MVP features to be agreed before deciding anything else. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `Executive Manager`,
+		"Demand list of MVP features to be agreed before deciding anything else."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Executive Manager. `+commonInstructions,
 		"Executive Manager",
-		fmt.Sprintf("Always look at what can be done now, pick small easy tasks. %s", commonInstructions)))
-	agents = append(agents, NewConversationalAgent(client, `"Resources Manager`,
+		"Always look at what can be done now, pick small easy tasks."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Resources Manager. `+commonInstructions,
 		"Resources Manager",
-		fmt.Sprintf("Resources are limited, make team choose the best path to proceed. %s", commonInstructions)))
+		"Resources are limited, make team choose the best path to proceed."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Critic. `+commonInstructions,
+		"Critic",
+		"Criticize team approaches, ideas point out obvious flaws in their plans."))
+	agents = append(agents, NewConversationalAgent(client, `You are AI Secretary Agent. `+commonInstructions,
+		`AI Secretary Agent`,
+		`Create a summary of the meeting in response-message field, use markdown formatting for tables and lists`))
 
 	for {
 		for agentIdx, _ := range agents {
@@ -61,8 +79,11 @@ If you have nothing to add, just say "agreed"".`
 				}
 
 				agents[subAgentIdx].ReceiveMessage(&engines.Message{
-					Role:    engines.ChatRoleUser,
-					Content: fmt.Sprintf("Message from agent %d: %s", agents[agentIdx].name, msg),
+					Role: engines.ChatRoleUser,
+					Content: fmt.Sprintf("Message from agent %s[%v]: %s",
+						agents[agentIdx].name,
+						time.Since(start),
+						msg),
 				})
 			}
 		}
@@ -125,7 +146,7 @@ func (ca *SimpleAgent) ProcessInput(input string) (*engines.Message, string, err
 
 	finalResponse := ""
 	fullFinalResponse := ""
-	err := generics.CreateSimplePipeline(ca.client).
+	err := generics.CreateSimplePipeline(ca.client, ca.name).
 		WithSystemMessage(`{{description}}
 
 You're set to achieve the following goal: {{goal}}
@@ -136,27 +157,35 @@ You're set to achieve the following goal: {{goal}}
 		WithTools(ca.tools...).
 		WithTemperature(1.0).
 		WithMinParsableResults(1).
+		WithResponseField("team-goal", "team goal at this point as you see it").
+		WithResponseField("project-goal", "current goal for the project").
+		WithResponseField("response-plan", "what team needs to hear from you, what you want to hear from the team").
 		WithResponseField("thoughts",
-			fmt.Sprintf("your thoughts on how to steer communication in order to achieve your initial goal: %s", ca.goal)).
-		WithResponseField("response-message", "a message to send").
-		WithFullResultProcessor(func(resp string) (generics.ResultProcessingOutcome, error) {
-			fullFinalResponse = resp
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("thoughts", func(t string) (generics.ResultProcessingOutcome, error) {
-			if t != "" {
-				fmt.Printf("thoughts: %s\n", aurora.White(t))
+			fmt.Sprintf("your thoughts on achieving initial goal aligned with your team's and project goals")).
+		WithResponseField("response-message", "express your ideas and questions in a short chat-style message").
+		WithResponseField("response-type", "1 - meeting scheduling; 2 - various team-wide calls for actions, work and meetings planning; 3 - questions about the project; 4 - responses to other's questions; 5 - novel ideas; pick one digit").
+		WithResultsProcessor(func(parsedResponse map[string]interface{}, fullResponse string) error {
+			responseType, rtExists := parsedResponse["response-type"]
+			responseMessage, rmExists := parsedResponse["response-message"]
+
+			if rtExists && rmExists {
+				var ok bool
+				rtv := fmt.Sprintf("%v", responseType)
+
+				rtvParsed := parseRating(rtv, 1, 5)
+				if rtvParsed >= 4 {
+					// accepting responseMessage as response...!
+					finalResponse, ok = responseMessage.(string)
+					fullFinalResponse = fullResponse
+
+					if ok && finalResponse != "" {
+						return nil
+					}
+				}
+
 			}
 
-			return generics.RPOIgnored, nil
-		}).
-		WithResultsProcessor("response-message", func(s string) (generics.ResultProcessingOutcome, error) {
-			if s != "" {
-				finalResponse = s
-				return generics.RPOProcessed, nil
-			}
-
-			return generics.RPOFailed, fmt.Errorf("empty response")
+			return fmt.Errorf("processing failed")
 		}).
 		Run(os_client.REP_IO)
 	if err != nil {
@@ -166,4 +195,28 @@ You're set to achieve the following goal: {{goal}}
 	response.Content = fullFinalResponse
 
 	return response, finalResponse, nil
+}
+
+func parseRating(mv string, i int, i2 int) int {
+	mv = strings.Replace(mv, ".5", "", -1)
+
+	digits := make(map[int]int)
+	for r := i; r <= i2; r++ {
+		if strings.Contains(mv, fmt.Sprintf("%d", r)) {
+			digits[r]++
+		}
+	}
+
+	if len(digits) == 0 {
+		return 0
+	}
+
+	sum := 0
+	cnt := 0
+	for k, _ := range digits {
+		sum += k
+		cnt++
+	}
+
+	return int(float64(sum) / float64(cnt))
 }
