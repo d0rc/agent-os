@@ -32,7 +32,7 @@ type SimplePipeline struct {
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimplePipeline {
-	return &SimplePipeline{
+	result := &SimplePipeline{
 		Vars:                    make(map[string]interface{}),
 		AssistantResponsePrefix: make(map[int]string),
 		ResponseFields:          make([]tools.MapKV, 0),
@@ -44,6 +44,10 @@ func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimpleP
 			return nil
 		},
 	}
+
+	result.Vars["name"] = name
+
+	return result
 }
 
 func (p *SimplePipeline) WithSystemMessage(systemMessage string) *SimplePipeline {
@@ -135,12 +139,15 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 	var err error
 retry:
 	cycle++
-	if cycle >= 0 {
-		systemMessage, err = p.constructSystemMessage()
-		if err != nil {
-			return err
-		}
-		minResults = 128
+
+	systemMessage, err = p.constructSystemMessage()
+	if err != nil {
+		return err
+	}
+	if cycle == 0 {
+		minResults = p.MinParsableResults
+	} else {
+		minResults = 8
 	}
 
 	chatPrompt := tools.NewChatPrompt().AddSystem(systemMessage)
