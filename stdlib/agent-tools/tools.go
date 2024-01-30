@@ -56,9 +56,15 @@ func GetToolsSelection(exclude []string) []AgentTool {
 func GetContextDescription(tools []AgentTool) string {
 	result := strings.Builder{}
 	result.WriteString("Available tools:\n")
-	for _, tool := range tools {
+	for idx, tool := range tools {
+		result.WriteString(tool.Name())
+		result.WriteString(" - ")
 		result.WriteString(tool.ContextDescription())
-		result.WriteString("\n")
+		if idx < len(tools)-1 {
+			result.WriteString(";\n")
+		} else {
+			result.WriteString(".\n")
+		}
 	}
 	result.WriteString("\n")
 
