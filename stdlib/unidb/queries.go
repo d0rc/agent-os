@@ -120,7 +120,10 @@ func (db *UniDB) ShouldExec(name string, args ...interface{}) sql.Result {
 func (db *UniDB) Exec(name string, args ...interface{}) (sql.Result, error) {
 	if !strings.Contains(name, "save-message") &&
 		!strings.Contains(name, "make-llm-cache-hit") &&
-		!strings.Contains(name, "make-search-cache-hit") {
+		!strings.Contains(name, "insert-embeddings-cache-record") &&
+		!strings.Contains(name, "set-embeddings-queue-pointer") &&
+		!strings.Contains(name, "make-search-cache-hit") &&
+		!strings.Contains(name, "make-embeddings-cache-hit") {
 		db.builder.logger.Trace().Msgf("running: %s(%v)", name, args)
 	}
 	return db.exec(db.db, name, args)

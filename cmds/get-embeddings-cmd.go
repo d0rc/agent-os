@@ -18,7 +18,9 @@ func ProcessGetEmbeddings(request []GetEmbeddingsRequest, ctx *server.Context, p
 	for idx, pr := range request {
 		results[idx] = make(chan *GetEmbeddingsResponse, 1)
 		go func(cr GetEmbeddingsRequest, ch chan *GetEmbeddingsResponse, idx int) {
+			//ts := time.Now()
 			embeddingsResponse, err := processGetEmbeddings(cr, ctx, process, priority)
+			//ctx.Log.Info().Msgf("done processing embeddings in %s", time.Since(ts))
 			if err != nil {
 				ctx.Log.Error().Err(err).
 					Msgf("Error processing embeddings request: ```%s```", cr.RawPrompt)
@@ -78,12 +80,15 @@ retryLoop:
 			// just continue...
 		} else {
 			response.Embeddings = decodedVector.VecF64
-			_, err := ctx.Storage.Db.Exec("make-embeddings-cache-hit", cachedResponse[0].Id)
+			response.TextHash = textHash
+			response.Text = cr.RawPrompt
+			response.Model = cr.Model
+			/*_, err := ctx.Storage.Db.Exec("make-embeddings-cache-hit", cachedResponse[0].Id)
 			if err != nil {
 				ctx.Log.Error().Err(err).
 					Msgf("Failed to mark cache hit for prompt %s", cr.RawPrompt)
 				// just continue...
-			}
+			}*/
 
 			return response, nil
 		}

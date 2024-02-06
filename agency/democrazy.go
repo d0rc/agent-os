@@ -8,7 +8,6 @@ import (
 	"github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/d0rc/agent-os/syslib/borrow-engine"
-	"github.com/logrusorgru/aurora"
 	"github.com/tidwall/gjson"
 	"os"
 	"strconv"
@@ -134,9 +133,10 @@ retryVoting:
 			}
 
 			if rateValue == "" {
-				fmt.Printf("no rateValue parsed: ```\n%s\n```\n%s\n```\n",
-					aurora.Cyan(choice),
-					aurora.Yellow(voterPrompt))
+				//fmt.Printf("no rateValue parsed: ```\n%s\n```\n%s\n```\n",
+				//	aurora.Cyan(choice),
+				//	aurora.Yellow(voterPrompt))
+				minResults++
 				return fmt.Errorf("no rateValue parsed: ```\n%s\n```", choice)
 			} else {
 				reconstructedBytes, _ := json.Marshal(&votersResponse{

@@ -22,7 +22,7 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	type command struct {
-		Input []string `json:"input"`
+		Input []string `json:"texts"`
 	}
 
 	promptBodies := make([]string, len(batch))
@@ -70,16 +70,13 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	type embeddingsResponse struct {
-		Data []struct {
-			Embedding []float64 `json:"embedding"`
-		} `json:"data"`
-		Model string `json:"model"`
+		Vectors [][]float64 `json:"vectors"`
 	}
 
 	// now, let us parse all the response
 	parsedResponse := &embeddingsResponse{}
 	err = json.Unmarshal(result, parsedResponse)
-	if err != nil || parsedResponse.Data == nil {
+	if err != nil || parsedResponse.Vectors == nil {
 		zlog.Error().Err(err).
 			Str("response", string(result)).
 			Msg("error unmarshalling response")
@@ -89,10 +86,10 @@ func RunEmbeddingsRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 
 	results := make([]*vectors.Vector, len(batch))
 	// ok now each choice goes to its caller
-	parsedModelName := parseModelName(parsedResponse.Model)
+	parsedModelName := "jinaai/jina-embeddings-v2-base-en"
 	for idx, job := range batch {
 		results[idx] = &vectors.Vector{
-			VecF64: parsedResponse.Data[idx].Embedding,
+			VecF64: parsedResponse.Vectors[idx],
 			Model:  &parsedModelName,
 		}
 		if job.ResEmbeddings != nil {

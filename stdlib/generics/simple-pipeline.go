@@ -125,12 +125,15 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 		for {
 			select {
 			case <-done:
+				fmt.Printf("\r\033[K\r")
 				return
 			case <-time.After(time.Second * 1):
-				fmt.Printf("\r\033[K\r[%s] %s is thinking, current cycle: %d\r",
+				fmt.Printf("\r\033[K\r[%s] %s is thinking, current cycle: %d [%d/%d]\r",
 					nextSymbol(),
 					aurora.BrightCyan(p.ProcessName),
-					cycle)
+					cycle,
+					okResults,
+					minResults)
 			}
 		}
 	}()
@@ -146,8 +149,6 @@ retry:
 	}
 	if cycle == 0 {
 		minResults = p.MinParsableResults
-	} else {
-		minResults = 8
 	}
 
 	chatPrompt := tools.NewChatPrompt().AddSystem(systemMessage)
@@ -175,6 +176,7 @@ retry:
 
 	for _, choice := range choices {
 		if _, exists := parsedChoices[choice]; exists {
+			minResults++
 			continue
 		}
 		parsedChoices[choice] = struct{}{}
@@ -185,7 +187,7 @@ retry:
 			parsedValue = s
 			return json.Unmarshal([]byte(s), &parsedResponse)
 		}); err != nil {
-			continue
+			// ...
 		}
 
 		if err = p.FullParsedResponseProcessor(parsedResponse, parsedValue); err != nil {
@@ -256,6 +258,14 @@ func (p *SimplePipeline) WithUserMessage(desc string) *SimplePipeline {
 		Role:    engines.ChatRoleUser,
 		Content: desc,
 	})
+
+	return p
+}
+
+func (p *SimplePipeline) ConditionalField(flag bool, f func(sp *SimplePipeline) *SimplePipeline) *SimplePipeline {
+	if flag {
+		return f(p)
+	}
 
 	return p
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/d0rc/agent-os/syslib/utils"
 	"github.com/logrusorgru/aurora"
 	"github.com/olekukonko/tablewriter"
+	"github.com/rs/zerolog"
 	"github.com/ulikunitz/xz"
 	"math/rand"
 	"os"
@@ -33,9 +34,10 @@ var reportsProcessed = uint64(0)
 var finalReportsPath = flag.String("final-reports-path", "/tmp/final-reports.json", "path to final reports storage")
 var startAgency = flag.Bool("start-agency", false, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
-var config = flag.String("agency-config", "agency.yaml", "path to agency config")
+var config = flag.String("agency-config", "../work2/agency.yaml", "path to agency config")
 var himHeads = flag.Int("him-heads", 1, "number of HIM-heads")
 var primaryAgentThreads = flag.Int("primary-agent-threads", 120, "number of threads for primary agent")
+var primaryGrowthFactor = flag.Int("primary-growth-factor", 10, "number of ways for primary agent to try")
 
 func main() {
 	ts := time.Now()
@@ -58,7 +60,18 @@ func main() {
 	agentState := agency.NewGeneralAgentState(client, "", agencySettings[0])
 
 	var spawningCallback func(name, goal string) chan string
+	startedAgents := make(map[string]chan string)
+	agentsLock := sync.RWMutex{}
 	spawningCallback = func(name, goal string) chan string {
+		agentsLock.Lock()
+		if ch, exists := startedAgents[name+goal]; exists {
+			agentsLock.Unlock()
+			return ch
+		}
+		finalReportsStream := make(chan string, 10)
+		startedAgents[name+goal] = finalReportsStream
+		agentsLock.Unlock()
+
 		clonedSettings, err := agency.ParseAgency(agencyYaml)
 		if err != nil {
 			lg.Fatal().Err(err).Msg("failed to parse agency")
@@ -67,7 +80,6 @@ func main() {
 		clonedSettings[0].Agent.Name = name
 		clonedSettings[0].Agent.PromptBased.Vars[agency.IV_GOAL] = goal
 		newAgentState := agency.NewGeneralAgentState(client, "", clonedSettings[0])
-		finalReportsStream := make(chan string, 10)
 
 		newAgentState.FinalReportChannel = finalReportsStream
 		newAgentState.ForkCallback = spawningCallback
@@ -82,7 +94,7 @@ func main() {
 	agentState.FinalReportChannel = finalReportsSink
 	//go agentState.ToTPipeline()
 	if *startAgency {
-		go agentState.SoTPipeline(3, *primaryAgentThreads, *primaryAgentThreads)
+		go agentState.SoTPipeline(*primaryGrowthFactor, *primaryAgentThreads, *primaryAgentThreads)
 	}
 
 	go func() {
@@ -90,7 +102,7 @@ func main() {
 		for {
 			select {
 			case report := <-finalReportsSink:
-				reports = append(reports, report)
+				reports = tools.DropDuplicates(append(reports, report))
 				serialized, err := json.Marshal(reports)
 				if err != nil {
 					continue
@@ -112,8 +124,25 @@ func main() {
 			lg.Fatal().Err(err).Msg("failed to unmarshal stored reports")
 		}
 		fmt.Printf("Got %d stored final reports\n", len(storedReports))
+		maxThreads := make(chan struct{}, 32)
 		for _, report := range tools.DropDuplicates(storedReports) {
-			finalReportsStream <- report
+			maxThreads <- struct{}{}
+			go func(report string) {
+				defer func() {
+					<-maxThreads
+				}()
+				resultYes := checkIfReportHasPlaceholdersOrFillers(client, report, lg)
+				if resultYes == true {
+					return
+				}
+
+				resultYes = checkIfReportHasAnyDataInIt(client, report, lg)
+				if resultYes == false {
+					return
+				}
+
+				finalReportsStream <- report
+			}(report)
 		}
 	}
 
@@ -187,6 +216,91 @@ func main() {
 	fmt.Printf("Done in %v\n", time.Since(ts))
 }
 
+func checkIfReportHasPlaceholdersOrFillers(client *os_client.AgentOSClient, report string, lg zerolog.Logger) bool {
+	var resultYes bool = true
+	err := generics.CreateSimplePipeline(client, "Quality Checker").
+		WithProcessName("quality-checker").
+		WithSystemMessage(`You are reports quality checker, your goal is to detect placeholders and fillers in the reports you are processing.
+
+Current report:
+{{report}}
+
+`).
+		WithVar("report", report).
+		WithResponseField("contains-fillers", "<yes|no>").
+		WithResultsProcessor(func(responseMap map[string]interface{}, choice string) error {
+			if responseMap != nil {
+				modelResponse, exists := responseMap["contains-fillers"]
+				if exists {
+					tmpResult, ok := modelResponse.(string)
+					if ok {
+						if tmpResult == "yes" {
+							resultYes = true
+							return nil
+						}
+						if tmpResult == "no" {
+							resultYes = false
+							return nil
+						}
+					}
+				}
+			}
+			return fmt.Errorf("error getting result from model")
+		}).
+		WithMinParsableResults(1).
+		Run(os_client.REP_IO)
+	if err != nil {
+		lg.Fatal().Err(err).Msg("failed to run pipeline")
+	}
+	return resultYes
+}
+
+func checkIfReportHasAnyDataInIt(client *os_client.AgentOSClient, report string, lg zerolog.Logger) bool {
+	resultYes := false
+	err := generics.CreateSimplePipeline(client, "Quality Checker").
+		WithProcessName("quality-checker").
+		WithSystemMessage(`You are reports quality checker, your goal is to detect if report you are processing contains any significant results.
+
+Reports describing research process and contain no research results should be marked as "contains-data": "no".
+`).
+		//WithVar("report", tools.CodeBlock(report)).
+		WithResponseField("thoughts", "reflect on research results presented in the report").
+		WithResponseField("contains-data", "<yes|no>").
+		WithUserMessage(fmt.Sprintf("Current report:\n%s\nEnd of current report.", tools.CodeBlock(report))).
+		WithResultsProcessor(func(responseMap map[string]interface{}, choice string) error {
+			if responseMap != nil {
+				modelResponse, exists := responseMap["contains-data"]
+				thoughts, thoughtsExists := responseMap["thoughts"]
+				if thoughtsExists {
+					thoughtsString, ok := thoughts.(string)
+					if ok && thoughtsString == "discuss text provided by user" {
+						return fmt.Errorf("broken logic")
+					}
+				}
+				if exists {
+					tmpResult, ok := modelResponse.(string)
+					if ok {
+						if tmpResult == "yes" {
+							resultYes = true
+							return nil
+						}
+						if tmpResult == "no" {
+							resultYes = false
+							return nil
+						}
+					}
+				}
+			}
+			return fmt.Errorf("error getting result from model")
+		}).
+		WithMinParsableResults(1).
+		Run(os_client.REP_IO)
+	if err != nil {
+		lg.Fatal().Err(err).Msg("failed to run pipeline")
+	}
+	return resultYes
+}
+
 type HIM struct {
 	Id                       string
 	InputFinalReportsStream  chan string
@@ -215,7 +329,22 @@ func (him *HIM) finalReportsMaker() {
 		initialNumberOfReports := len(finalReports)
 		for len(finalReports) > 2 {
 			him.Busy = true
+
+			him.Printf("cycle %d, started with %d reports\n", cycle, len(finalReports))
+
+			tmpFinalReports, mergeInstructions, err := superDeduplicate(him.Client, him.ContextGoal, finalReports, true)
+			if err == nil {
+				finalReports = tmpFinalReports
+			}
+
 			finalReports = shuffle(finalReports)
+
+			finalReports = him.generateUpdatedReports(him.ContextGoal, finalReports, mergeInstructions)
+
+			tmpFinalReports, _, err = superDeduplicate(him.Client, him.ContextGoal, finalReports, false)
+			if err == nil {
+				finalReports = tmpFinalReports
+			}
 
 			cycle++
 			him.ComputeCycles++
@@ -223,63 +352,69 @@ func (him *HIM) finalReportsMaker() {
 				him.CycleBreaks++
 				break
 			}
+
 			him.Printf("Running cycle %d of #%d over %d reports, started with %d reports.\n",
 				cycle,
 				him.CollectionCycle,
 				len(finalReports),
 				initialNumberOfReports)
 			//newFinalReports, ratings := naiveComparator(agentState, finalReports, client, againCounter)
+			/*
+				var chunks = make([][]string, 0)
+				chunkSize := 2
 
-			var chunks = make([][]string, 0)
-			chunkSize := 2
-
-			finalReports = shuffle(finalReports)
-			for i := 0; i < len(finalReports); i += chunkSize {
-				end := i + chunkSize
-				if end > len(finalReports) {
-					end = len(finalReports)
+				finalReports = shuffle(finalReports)
+				for i := 0; i < len(finalReports); i += chunkSize {
+					end := i + chunkSize
+					if end > len(finalReports) {
+						end = len(finalReports)
+					}
+					chunks = append(chunks, finalReports[i:end])
 				}
-				chunks = append(chunks, finalReports[i:end])
-			}
 
-			chunksProcessingResults := make([]string, 0)
-			chunksProcessingResultsLock := sync.RWMutex{}
-			agentGoal := him.ContextGoal
-			wg := sync.WaitGroup{}
-			for chunkIdx, chunkReports := range chunks {
-				if len(chunkReports) != 2 {
-					chunksProcessingResultsLock.Lock()
-					chunksProcessingResults = append(chunksProcessingResults, chunkReports...)
-					chunksProcessingResultsLock.Unlock()
-					continue
-				}
-				wg.Add(1)
-				go func(chunkIdx int, chunkReports []string, results *[]string, lock *sync.RWMutex) {
-					defer wg.Done()
-					reportsAreSame, _ := areReportsEqual(him.Client, agentGoal, chunkReports[0], chunkReports[1])
-					if reportsAreSame {
-						him.Printf("Got equal reports for chunk %d\n", chunkIdx)
+				chunksProcessingResults := make([]string, 0)
+				chunksProcessingResultsLock := sync.RWMutex{}
+				agentGoal := him.ContextGoal
+				wg := sync.WaitGroup{}
+
+				for chunkIdx, chunkReports := range chunks {
+					if len(chunkReports) != 2 {
 						chunksProcessingResultsLock.Lock()
-						chunksProcessingResults = append(chunksProcessingResults, chunkReports[0])
+						chunksProcessingResults = append(chunksProcessingResults, chunkReports...)
 						chunksProcessingResultsLock.Unlock()
-						return
+						continue
 					}
+					wg.Add(1)
+					go func(chunkIdx int, chunkReports []string, results *[]string, lock *sync.RWMutex) {
+						defer wg.Done()
+						reportsAreSame, _ := areReportsEqual(him.Client, agentGoal, chunkReports[0], chunkReports[1])
+						if reportsAreSame {
+							him.Printf("Got equal reports for chunk %d\n", chunkIdx)
+							chunksProcessingResultsLock.Lock()
+							chunksProcessingResults = append(chunksProcessingResults, chunkReports[0])
+							chunksProcessingResultsLock.Unlock()
+							return
+						}
 
-					merged := him.generateUpdatedReport(agentGoal, chunkReports[0], chunkReports[1])
-					if len(merged) == 0 {
-						merged = append(merged, chunkReports...)
+						merged := him.generateUpdatedReport(agentGoal, chunkReports[0], chunkReports[1])
+						if len(merged) == 0 {
+							merged = append(merged, chunkReports...)
+						}
+
+						chunksProcessingResultsLock.Lock()
+						chunksProcessingResults = append(chunksProcessingResults, merged...)
+						chunksProcessingResultsLock.Unlock()
+					}(chunkIdx, chunkReports, &chunksProcessingResults, &chunksProcessingResultsLock)
+				}
+				wg.Wait()
+
+				if len(chunksProcessingResults) > 0 {
+					var err error
+					finalReports, err = superDeduplicate(him.Client, agentGoal, tools.DropDuplicates(chunksProcessingResults))
+					if err != nil {
+						finalReports = tools.DropDuplicates(chunksProcessingResults)
 					}
-
-					chunksProcessingResultsLock.Lock()
-					chunksProcessingResults = append(chunksProcessingResults, merged...)
-					chunksProcessingResultsLock.Unlock()
-				}(chunkIdx, chunkReports, &chunksProcessingResults, &chunksProcessingResultsLock)
-			}
-			wg.Wait()
-
-			if len(chunksProcessingResults) > 0 {
-				finalReports = tools.DropDuplicates(chunksProcessingResults)
-			}
+				}*/
 
 			him.Printf("Got %d reports, after merge phase\n", len(finalReports))
 
@@ -298,14 +433,82 @@ func (him *HIM) finalReportsMaker() {
 	}
 }
 
-func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string) (bool, error) {
+func (him *HIM) generateUpdatedReports(goal string, reports []string, instructions map[string][]string) []string {
+	outputs := make([]string, 0)
+	lock := sync.RWMutex{}
+	wg := sync.WaitGroup{}
+	for idxA, reportA := range reports {
+		for idxB, reportB := range reports {
+			if idxA == idxB {
+				continue
+			}
+
+			wg.Add(1)
+			go func(goal, reportA, reportB string) {
+				merged := him.generateUpdatedReport(goal, reportA, reportB, instructions[fmt.Sprintf("%s:%s", reportA, reportB)])
+				//wg2 := sync.WaitGroup{}
+				lock.Lock()
+				outputs = append(outputs, merged...)
+				lock.Unlock()
+
+				wg.Done()
+			}(goal, reportA, reportB)
+		}
+	}
+
+	wg.Wait()
+
+	return outputs
+}
+
+func superDeduplicate(client *os_client.AgentOSClient, goal string, reports []string, returnInstructions bool) ([]string, map[string][]string, error) {
+	mergeInstructions := make(map[string][]string)
+	deduplicated := make(map[string]string)
+	for idxA, reportA := range reports {
+		for idxB, reportB := range reports {
+			if idxA == idxB {
+				continue
+			}
+
+			reportsAreSame, instructions, err := areReportsEqual(client, goal, reportA, reportB, returnInstructions)
+			if instructions != nil && len(instructions) > 0 {
+				mergeInstructions[fmt.Sprintf("%s:%s", reportA, reportB)] = tools.DropDuplicates(append(mergeInstructions[reportA], instructions...))
+			}
+			if err != nil {
+				return nil, nil, err
+			}
+			// let's check which report is in the map already...!
+
+			_, repArecorded := deduplicated[reportA]
+			_, repBrecorded := deduplicated[reportB]
+
+			if reportsAreSame && (repArecorded || repBrecorded) {
+				continue
+			}
+
+			if reportsAreSame {
+				deduplicated[reportA] = reportA
+			} else {
+				deduplicated[reportA] = reportA
+				deduplicated[reportB] = reportB
+			}
+		}
+	}
+
+	results := make([]string, 0, len(deduplicated))
+	for _, rep := range deduplicated {
+		results = append(results, rep)
+	}
+
+	return results, mergeInstructions, nil
+}
+
+func areReportsEqual(client *os_client.AgentOSClient, goal, a, b string, returnInstructions bool) (bool, []string, error) {
+	mergeInstructions := make([]string, 0)
 	yesCounter := uint64(0)
 	locker := sync.RWMutex{}
 	err := generics.CreateSimplePipeline(client, "him-equality-test").
 		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
-
-Primary goal:
-{{goal}}
 
 Your task is to compare following two reports:
 Report A:
@@ -315,39 +518,50 @@ Report B:
 {{repB}}
 
 Please help to choose a report for further processing.
-Are these reports the same?`).
+Are these reports interchangeable?`).
 		WithVar("goal", tools.CodeBlock(goal)).
 		WithVar("repA", tools.CodeBlock(a)).
 		WithVar("repB", tools.CodeBlock(b)).
 		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
-		WithResponseField("reports-are-equal", "<yes|no>").
+		WithResponseField("reports-are-interchangeable", "<yes|no>").
+		ConditionalField(returnInstructions, func(sp *generics.SimplePipeline) *generics.SimplePipeline {
+			return sp.WithResponseField("instructions", "instructions on merging these reports by re-writing into a single text and merging lists of similar entities, i.e. without any additional research")
+		}).
+		WithMinParsableResults(1).
 		WithResultsProcessor(func(resp map[string]interface{}, choice string) error {
-			if v, exists := resp["reports-are-equal"]; exists {
+			if v, exists := resp["reports-are-interchangeable"]; exists {
 				if vString, ok := v.(string); ok {
 					if vString == "yes" {
 						locker.Lock()
 						yesCounter++
 						locker.Unlock()
+						_ = os.WriteFile("reports-are-equal.txt", []byte(choice), 0666)
 						return nil
 					}
 					if vString == "no" {
+						if instructions, ok := resp["instructions"].(string); ok && instructions != "" {
+							mergeInstructions = append(mergeInstructions, instructions)
+						}
+						_ = os.WriteFile("reports-not-equal.txt", []byte(choice), 0666)
 						return nil
 					}
 				}
 			}
+
+			_ = os.WriteFile("reports-unknown-equality.txt", []byte(choice), 0666)
 			return fmt.Errorf("invalid choice")
 		}).
 		Run(os_client.REP_IO)
 
 	if err != nil {
-		return false, err
+		return false, mergeInstructions, err
 	}
 
-	if yesCounter >= 2 {
-		return true, nil
+	if yesCounter >= 1 {
+		return true, nil, nil
 	}
 
-	return false, nil
+	return false, mergeInstructions, nil
 }
 
 func shuffle(reports []string) []string {
@@ -457,6 +671,9 @@ func writeTable(fname string, statistics map[string]*HIMStats) {
 }
 
 func (him *HIM) printReports(ratings map[int]int, reports []string, reportsStream chan string) {
+	if reports == nil || len(reports) == 0 {
+		return
+	}
 	maxVal := ratings[0]
 	maxIdx := 0
 	for idx, val := range ratings {
@@ -525,6 +742,19 @@ func getSizeAndEntropy(best int, reports []string) (*struct {
 		allReportsBuilder.WriteString(report)
 	}
 
+	if best >= len(reports) {
+		return &struct {
+			BestSize    int
+			BestEntropy float64
+			AllSize     int
+			AllEntropy  float64
+		}{
+			BestSize:    bestSize,
+			BestEntropy: bestEntropy,
+			AllSize:     allSize,
+			AllEntropy:  allEntropy,
+		}, nil
+	}
 	xzCompressedBest, err := xzCompress(reports[best])
 	if err != nil {
 		return nil, err
@@ -580,7 +810,7 @@ func xzCompress(s string) ([]byte, error) {
 
 type modelResponse struct {
 	//Thoughts   string `json:"thoughts"`
-	BestReport string `json:"best-report"`
+	BestReport string `json:"recommendation"`
 	// UpdatedReport string `json:"updated-report"`
 }
 
@@ -592,34 +822,38 @@ func (him *HIM) isReportABetter(goal string, a string, b string) (bool, error) {
 	resultsProcessed := uint64(0)
 	resultsAttempted := uint64(0)
 
-	err := generics.CreateSimplePipeline(him.Client, "him-is-better-test").
-		WithSystemMessage(`You are Report Comparing AI. You have to pick the best report for the primary goal.
+	err := generics.CreateSimplePipeline(him.Client, "select-optimal-report").
+		WithSystemMessage(`
+You are an Advanced Data Analysis AI, with a primary focus on identifying and comparing the quantity and relevance of entities or data points within reports based on a specific goal.
 
-Primary goal:
+Primary Objective:
 {{goal}}
 
-Your task is to compare the following two reports:
-Report A:
+You are presented with two reports for comparison:
+- Report A:
 {{repA}}
 
-Report B:
+- Report B:
 {{repB}}
 
-Please help me choose a report for further processing.
-Which of the reports is more comprehensive and better aligns with the primary goal?`).
+In your evaluation, prioritize the identification of entities or data points relevant to the primary objective. Assess which report contains a greater quantity of relevant entities or data, considering any additional information provided only if it enhances the understanding or relevance of these entities.
+
+Ignore the self-valuations and self-reflection in source reports, consider only collected facts and data. 
+Recommend which report (A, B, or both) best aligns with the primary objective and provides better evidence based on the quantity and relevance of the entities or data points.`).
 		WithVar("goal", goal).
 		WithVar("repA", a).
 		WithVar("repB", b).
-		WithResponseField("thoughts", "self-thoughts, discussing which report is more comprehensive and better aligns with the primary goal").
-		WithResponseField("best-report", "<A|both|B>").
-		WithResultsProcessor(func(m map[string]interface{}, choice string) error {
+		WithResponseField("evaluation", "detailed analysis focusing on the quantity and relevance of entities or data points").
+		WithResponseField("recommendation", "<A|B|both|none>"). // "Based on your analysis, which report(s) would you recommend?"
+		//WithResponseField("fallback", "If you cannot make a definitive recommendation, describe any additional information or clarification that would be helpful.").
+		WithResultsProcessor(func(_ map[string]interface{}, choice string) error {
 			atomic.AddUint64(&resultsAttempted, 1)
 			choice = strings.ReplaceAll(choice, "\",\n}", "\"\n}")
 
 			// Define regular expressions for matching report types
-			reportARegex := regexp.MustCompile(`"best-report": "(A|Report A|ReportA|<A>|Report A with the addendum .*)`)
-			reportBRegex := regexp.MustCompile(`"best-report": "(B|Report B|ReportB|<B>)`)
-			reportBothRegex := regexp.MustCompile(`"best-report": "(A and B|A,B|<A,B>|<A, B>|<BOTH A and B>|both)"`)
+			reportARegex := regexp.MustCompile(`"recommendation": "(A|Report A|ReportA|<A>|Report A with the addendum .*)`)
+			reportBRegex := regexp.MustCompile(`"recommendation": "(B|Report B|ReportB|<B>)`)
+			reportBothRegex := regexp.MustCompile(`"recommendation": "(A and B|A,B|<A,B>|<A, B>|<BOTH A and B>|both)"`)
 
 			parsedResponse := modelResponse{}
 			// Process the choice
@@ -671,36 +905,82 @@ Current choice is (total errors = %d, parse error = %v):
 	return votesA > votesB, err
 }
 
-func (him *HIM) generateUpdatedReport(goal, a, b string) []string {
-	updatedReportQuery := tools.NewChatPrompt().
-		AddSystem(fmt.Sprintf(`You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
-Primary goal:
+func (him *HIM) generateUpdatedReport(goal, a, b string, instructions []string) []string {
+	/*updatedReportQuery := tools.NewChatPrompt().
+			AddSystem(fmt.Sprintf(`You are Report Merging AI. Your goal is to collect the information relevant to the primary goal.
+	Primary goal:
+	%s
+
+	Your task is to compare these drafts and merge them if necessary:
+
+	%s
+	%s
+
+	Please focus only on the facts and disregard any secondary or ancillary comments and discussions that the field agents have included in the drafts.
+	Re-structure the draft above to make it easy to read and comprehend.  Don't miss or exclude any facts or anything else important.
+	`,
+				tools.CodeBlock(goal),
+				tools.CodeBlock(a),
+				tools.CodeBlock(b))).DefString()*/
+	tactics := make([]string, 0)
+	if instructions != nil && len(instructions) > 0 {
+		tactics = append(tactics, instructions...)
+	}
+	tactics = append(tactics, `1. **Identify and Extract Relevant Facts**: Carefully review both drafts to extract all relevant facts that align with the primary goal. Ignore any secondary discussions or ancillary comments not directly related to the objective.
+
+2. **Eliminate Redundancies**: Where the two drafts contain overlapping information, consolidate the details to avoid repetition while ensuring no critical fact is omitted.
+
+3. **Organize for Clarity and Coherence**: Re-arrange the extracted information to create a logically structured, easy-to-read document. The structure should facilitate understanding and highlight the most pertinent facts supporting the primary goal.
+
+4. **Maintain Factual Accuracy**: Ensure that the merged report remains true to the facts presented in the original drafts. Any discrepancies or contradictions between the drafts should be noted and addressed appropriately.
+
+Your final output should be a merged report that is comprehensive, factually accurate, and directly supports the primary goal. It should be free of irrelevant commentary and organized in a manner that enhances readability and comprehension.
+`)
+	requests := make([]cmds.GetCompletionRequest, 0, len(tactics))
+	for _, tactic := range shuffle(tactics) {
+		updatedReportQuery := tools.NewChatPrompt().
+			AddSystem(fmt.Sprintf(`You are an Advanced Report Merging AI, specializing in synthesizing information to support a specific primary goal. Your task is to analyze, compare, and integrate content from two provided drafts into a single, coherent document.
+
+Primary Goal:
 %s
 
-Your task is to compare these drafts and merge them if necessary:
-
-%s
+Instructions:
 %s
 
-Please focus only on the facts and disregard any secondary or ancillary comments and discussions that the field agents have included in the drafts.
-Re-structure the draft above to make it easy to read and comprehend.  Don't miss or exclude any facts or anything else important.
-`,
-			tools.CodeBlock(goal),
-			tools.CodeBlock(a),
-			tools.CodeBlock(b))).DefString()
+Drafts for Comparison and Merging:
+- Report A:
+%s
+
+- Report B:
+%s
+
+Do not reference drafts in the text of combined report. Do not process placeholders and ignore placeholders' content.
+Make sure to consolidate all lists first.
+Please proceed with the merging process according to these guidelines.`,
+				tools.CodeBlock(goal),
+				tactic,
+				tools.CodeBlock(a),
+				tools.CodeBlock(b))).DefString()
+
+		requests = append(requests, cmds.GetCompletionRequest{
+			RawPrompt:   updatedReportQuery,
+			MinResults:  1,
+			Temperature: 0.1,
+		})
+	}
 
 	minResults := 0
+	cycle := 0
 retryUpdatedReport:
 	minResults++
+	cycle++
+	for i, _ := range requests {
+		requests[i].MinResults = minResults
+	}
+
 	updatedReportResponse, err := him.Client.RunRequest(&cmds.ClientRequest{
-		ProcessName: "him-merger",
-		GetCompletionRequests: []cmds.GetCompletionRequest{
-			{
-				RawPrompt:   updatedReportQuery,
-				MinResults:  minResults,
-				Temperature: 0.9,
-			},
-		},
+		ProcessName:           "him-merger",
+		GetCompletionRequests: requests,
 	}, 600*time.Second, os_client.REP_Default)
 	if err != nil {
 		time.Sleep(100 * time.Millisecond)
@@ -708,13 +988,35 @@ retryUpdatedReport:
 		goto retryUpdatedReport
 	}
 
-	choices := tools.FlattenChoices(updatedReportResponse.GetCompletionResponse)
-	if len(choices) > minResults {
-		minResults = len(choices) + 1
+	originalChoices := tools.FlattenChoices(updatedReportResponse.GetCompletionResponse)
+	if cycle == 1 && len(originalChoices) >= minResults {
+		minResults = len(originalChoices) + 1
 		goto retryUpdatedReport
 	}
 
-	for _, updatedReport := range choices {
+	// filter choices
+	choices := make([]string, 0)
+	wg := sync.WaitGroup{}
+	lock := sync.RWMutex{}
+	for _, rep := range originalChoices {
+		wg.Add(1)
+		go func(rep string) {
+			if checkIfReportHasPlaceholdersOrFillers(him.Client, rep, zerolog.Logger{}) {
+				return
+			}
+
+			if checkIfReportHasAnyDataInIt(him.Client, rep, zerolog.Logger{}) {
+				lock.Lock()
+				choices = append(choices, rep)
+				lock.Unlock()
+			}
+			wg.Done()
+		}(rep)
+	}
+
+	wg.Wait()
+
+	for _, updatedReport := range shuffle(choices) {
 		contentCheck := strings.ReplaceAll(updatedReport, " ", "")
 		contentCheck = strings.ReplaceAll(contentCheck, "`", "")
 		contentCheck = strings.ReplaceAll(contentCheck, "\n", "")
@@ -728,6 +1030,8 @@ retryUpdatedReport:
 			ratings := make(map[string]int)
 			reportsList := append([]string{}, a, b, updatedReport)
 			allOptions := make([]string, 0)
+			allOptionsLock := sync.RWMutex{}
+			wg := sync.WaitGroup{}
 			for _, reportA := range reportsList {
 				reportAId := engines.GenerateMessageId(reportA)
 				for _, reportB := range reportsList {
@@ -735,21 +1039,28 @@ retryUpdatedReport:
 					if reportAId == reportBId {
 						continue
 					}
-
-					isBetter, err := him.isReportABetter(goal, reportA, reportB)
-					if err != nil {
-						continue
-					}
-					if isBetter {
-						ratings[reportAId]++
-						allOptions = append(allOptions, reportA)
-					}
+					wg.Add(1)
+					go func(goal, reportA, reportB, reportAId, reportBId string) {
+						defer wg.Done()
+						isBetter, err := him.isReportABetter(goal, reportA, reportB)
+						if err != nil {
+							return
+						}
+						if isBetter {
+							allOptionsLock.Lock()
+							ratings[reportAId]++
+							allOptions = append(allOptions, reportA)
+							allOptionsLock.Unlock()
+						}
+					}(goal, reportA, reportB, reportAId, reportBId)
 				}
 			}
 
+			wg.Wait()
+
 			// remove all duplicates
 			results := tools.DropDuplicates(allOptions)
-			if len(results) <= 2 {
+			if len(results) < 2 {
 				return results
 			}
 		}

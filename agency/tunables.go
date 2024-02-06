@@ -6,9 +6,9 @@ import (
 )
 
 const NumberOfVotesToCache = 2
-const VoterMinResults = 2
+const VoterMinResults = 6
 const MinimumNumberOfVotes = VoterMinResults
-const MinimalVotingRatingForCommand = 3
+const MinimalVotingRatingForCommand = 4
 const MaxIoRequestsThreads = 160
 const WriteVotesLog = true
 
