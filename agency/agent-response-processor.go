@@ -302,33 +302,35 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
-				roleName := roleNameInterface.(string)
-				taskDescriptionInterface := args["task-description"]
-				if taskDescriptionInterface != nil {
-					var taskDescription string
-					taskDescription, ok := taskDescriptionInterface.(string)
-					if ok {
-						fmt.Printf("Hiring agent: %s, to execute task: %s\n",
-							aurora.BrightWhite(roleName),
-							aurora.BrightYellow(taskDescription))
-						go func(roleName, taskDescription, resultId string) {
+				roleName, roleNameOk := roleNameInterface.(string)
+				if roleNameOk {
+					taskDescriptionInterface := args["task-description"]
+					if taskDescriptionInterface != nil {
+						var taskDescription string
+						taskDescription, ok := taskDescriptionInterface.(string)
+						if ok {
+							fmt.Printf("Hiring agent: %s, to execute task: %s\n",
+								aurora.BrightWhite(roleName),
+								aurora.BrightYellow(taskDescription))
+							go func(roleName, taskDescription, resultId string) {
 
-							for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
-								// we've got final report from our sub-agent
-								fmt.Printf("Got sub-agent's final report: %s\n", msg)
-								content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
-									roleName, msg)
-								contentMessageId := engines.GenerateMessageId(content)
-								tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
-									roleName, taskDescription, msg))
-								agentState.historyAppenderChannel <- &engines.Message{
-									ID:      &contentMessageId,
-									ReplyTo: map[string]struct{}{resultId: {}},
-									Role:    engines.ChatRoleUser,
-									Content: content,
+								for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
+									// we've got final report from our sub-agent
+									fmt.Printf("Got sub-agent's final report: %s\n", msg)
+									content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
+										roleName, msg)
+									contentMessageId := engines.GenerateMessageId(content)
+									tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
+										roleName, taskDescription, msg))
+									agentState.historyAppenderChannel <- &engines.Message{
+										ID:      &contentMessageId,
+										ReplyTo: map[string]struct{}{resultId: {}},
+										Role:    engines.ChatRoleUser,
+										Content: content,
+									}
 								}
-							}
-						}(roleName, taskDescription, resultId)
+							}(roleName, taskDescription, resultId)
+						}
 					}
 				}
 			}

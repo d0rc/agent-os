@@ -33,7 +33,7 @@ func keys(to map[string]struct{}) []string {
 }
 func writeMessagesTrace(agentState *GeneralAgentInfo, message *engines.Message) {
 	if ShouldWriteMessageTrace {
-		_, _ = agentState.Server.RunRequest(&cmds.ClientRequest{
+		agentState.Server.RunRequest(&cmds.ClientRequest{
 			ProcessName:        agentState.SystemName,
 			WriteMessagesTrace: []*engines.Message{message},
 		}, 120*time.Second, os_client.REP_IO)

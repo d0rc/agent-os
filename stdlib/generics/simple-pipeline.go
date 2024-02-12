@@ -156,18 +156,14 @@ retry:
 		chatPrompt.AddMessage(msg)
 	}
 
-	response, err := p.Client.RunRequest(&cmds.ClientRequest{
+	response := p.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: p.ProcessName,
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
 			RawPrompt:   chatPrompt.DefString(),
 			Temperature: p.Temperature,
 			MinResults:  minResults,
-		}, minResults),
+		}, min(64, minResults)),
 	}, 120*time.Second, executionPool)
-	if err != nil {
-		time.Sleep(100 * time.Millisecond)
-		goto retry
-	}
 
 	choices := tools.DropDuplicates(tools.FlattenChoices(response.GetCompletionResponse))
 	if len(choices) > minResults {

@@ -41,7 +41,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 		os.Exit(1)
 	}
 
-	computeRouter := be.NewInferenceEngine(be.ComputeFunction{
+	computeRouter := be.NewInferenceEngine(lg, be.ComputeFunction{
 		be.JT_Completion: func(n *be.InferenceNode, jobs []*be.ComputeJob) ([]*be.ComputeJob, error) {
 			lg.Warn().Msg("completion job received")
 			if len(jobs) == 0 {
@@ -57,7 +57,7 @@ func NewContext(configPath string, lg zerolog.Logger, srvSettings *Settings) (*C
 				}
 			}
 
-			_, err := engines.RunCompletionRequest(n.RemoteEngine, tasks)
+			_, err := engines.RunCompletionRequest(lg, n.RemoteEngine, tasks)
 			if err != nil {
 				lg.Error().Err(err).Msgf("error running completion request: %v", err)
 				return nil, err

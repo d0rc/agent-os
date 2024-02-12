@@ -8,6 +8,7 @@ import (
 	process_embeddings "github.com/d0rc/agent-os/process-embeddings"
 	"github.com/d0rc/agent-os/stdlib/metrics"
 	"github.com/d0rc/agent-os/syslib/server"
+	trx_cache "github.com/d0rc/agent-os/syslib/trx-cache"
 	"github.com/d0rc/agent-os/syslib/utils"
 	"io"
 	"log"
@@ -47,6 +48,8 @@ func main() {
 		ctx.LaunchWorker("background{embeddings}", process_embeddings.BackgroundEmbeddingsWorker)
 	})
 
+	cache := trx_cache.NewTrxCache()
+
 	// start a http server on port 9000
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		metrics.Tick("http.requests", 1)
@@ -65,13 +68,17 @@ func main() {
 			return
 		}
 
-		resp, err := processRequest(clientRequest, ctx)
+		respBytes := cache.GetValue(clientRequest.Trx, func() []byte {
+			resp, err := processRequest(clientRequest, ctx)
 
-		respBytes, err := json.Marshal(resp)
-		if err != nil {
-			lg.Error().Err(err).Msg("error serializing server response")
-			return
-		}
+			respBytes, err := json.Marshal(resp)
+			if err != nil {
+				lg.Error().Err(err).Msg("error serializing server response")
+				return respBytes
+			}
+
+			return respBytes
+		})
 
 		_, err = w.Write(respBytes)
 		if err != nil {

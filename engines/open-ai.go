@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	zlog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"io"
 	"net/http"
 	"strings"
@@ -24,7 +24,7 @@ func guessModelsEndpoint(engine *RemoteInferenceEngine) string {
 	return engine.EndpointUrl
 }
 
-func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask, client *http.Client) ([]*Message, error) {
+func openAICompatibleInference(lg zerolog.Logger, inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask, client *http.Client) ([]*Message, error) {
 	if len(inferenceEngine.Models) == 0 {
 		err := fetchInferenceEngineModels(inferenceEngine)
 		if err != nil {
@@ -80,7 +80,7 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 
 		commandBuffer, err = json.Marshal(cmd)
 		if err != nil {
-			zlog.Fatal().Err(err).Msg("error marshaling command")
+			lg.Fatal().Err(err).Msg("error marshaling command")
 		}
 	} else {
 		cmd := &commandSingle{
@@ -95,7 +95,7 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 
 		commandBuffer, err = json.Marshal(cmd)
 		if err != nil {
-			zlog.Fatal().Err(err).Msg("error marshaling command")
+			lg.Fatal().Err(err).Msg("error marshaling command")
 		}
 	}
 
@@ -106,7 +106,7 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 
 	// whatever happened here, it's not of our business, we should just log it
 	if err != nil {
-		zlog.Error().
+		lg.Error().
 			Msgf("error in request: %v, %s", err, inferenceEngine.EndpointUrl)
 		return nil, err
 	}
@@ -115,15 +115,15 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 	result, err := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
-		zlog.Error().Err(err).
-			Interface("batch", batch).
-			Msg("error reading response")
+		lg.Error().Err(err).
+			//Interface("batch", batch).
+			Msgf("error reading response: %v", err)
 		return nil, err
 	}
 
 	if resp.StatusCode != 200 {
 		err = fmt.Errorf("http code is %d, err: %v", resp.StatusCode, string(result))
-		zlog.Error().Err(err).
+		lg.Error().Err(err).
 			Msgf("err in compl. (%s): %v", inferenceEngine.EndpointUrl, err)
 		return nil, err
 	}
@@ -142,9 +142,8 @@ func openAICompatibleInference(inferenceEngine *RemoteInferenceEngine, batch []*
 	parsedResponse := &response{}
 	err = json.Unmarshal(result, parsedResponse)
 	if err != nil {
-		zlog.Error().Err(err).
-			Str("response", string(result)).
-			Msg("error unmarshalling response")
+		lg.Error().Err(err).
+			Msgf("error unmarshalling response: %v", string(result))
 		return nil, err
 	}
 

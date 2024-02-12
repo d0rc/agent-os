@@ -81,6 +81,9 @@ func (p *ChatPrompt) String(style PromptStyle) string {
 		finalPrompt.WriteString("### Assistant:\n")
 	} else if style == PSChatML {
 		for _, m := range p.messages {
+			if m == nil {
+				continue
+			}
 			switch m.Role {
 			case engines.ChatRoleSystem:
 				finalPrompt.WriteString("<|im_start|>system\n")

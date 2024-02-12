@@ -9,7 +9,7 @@ import (
 
 func (c *AgentOSClient) GetTaskCachedResult(namespace, key string) ([]byte, error) {
 	documentId := engines.GenerateMessageId(key)
-	cachedResult, err := c.RunRequest(&cmds.ClientRequest{
+	cachedResult := c.RunRequest(&cmds.ClientRequest{
 		GetCacheRecords: []cmds.GetCacheRecord{
 			{
 				Namespace: namespace,
@@ -17,10 +17,6 @@ func (c *AgentOSClient) GetTaskCachedResult(namespace, key string) ([]byte, erro
 			},
 		},
 	}, 60*time.Second, REP_IO)
-
-	if err != nil {
-		return nil, err
-	}
 
 	if len(cachedResult.GetCacheRecords) == 0 {
 		return nil, nil
@@ -31,7 +27,7 @@ func (c *AgentOSClient) GetTaskCachedResult(namespace, key string) ([]byte, erro
 
 func (c *AgentOSClient) SetTaskCachedResult(namespace, key string, result []byte) error {
 	documentId := engines.GenerateMessageId(key)
-	response, err := c.RunRequest(&cmds.ClientRequest{
+	response := c.RunRequest(&cmds.ClientRequest{
 		SetCacheRecords: []cmds.SetCacheRecord{
 			{
 				Namespace: namespace,
@@ -40,10 +36,6 @@ func (c *AgentOSClient) SetTaskCachedResult(namespace, key string, result []byte
 			},
 		},
 	}, 60*time.Second, REP_IO)
-
-	if err != nil {
-		return err
-	}
 
 	done := response.SetCacheRecords[0].Done
 

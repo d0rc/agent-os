@@ -9,6 +9,7 @@ import (
 	"github.com/d0rc/agent-os/agency"
 	"github.com/d0rc/agent-os/cmds"
 	"github.com/d0rc/agent-os/engines"
+	"github.com/d0rc/agent-os/examples/research-agency-1/gaba"
 	"github.com/d0rc/agent-os/stdlib/generics"
 	"github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/stdlib/tools"
@@ -955,7 +956,7 @@ Drafts for Comparison and Merging:
 %s
 
 Do not reference drafts in the text of combined report. Do not process placeholders and ignore placeholders' content.
-Make sure to consolidate all lists first.
+Make sure to consolidate all lists first. Avoid creating new lists based on your own knowledge at all times.
 Please proceed with the merging process according to these guidelines.`,
 				tools.CodeBlock(goal),
 				tactic,
@@ -978,15 +979,10 @@ retryUpdatedReport:
 		requests[i].MinResults = minResults
 	}
 
-	updatedReportResponse, err := him.Client.RunRequest(&cmds.ClientRequest{
+	updatedReportResponse := him.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName:           "him-merger",
 		GetCompletionRequests: requests,
 	}, 600*time.Second, os_client.REP_Default)
-	if err != nil {
-		time.Sleep(100 * time.Millisecond)
-		him.Printf("Error getting response for updated report, going to retry")
-		goto retryUpdatedReport
-	}
 
 	originalChoices := tools.FlattenChoices(updatedReportResponse.GetCompletionResponse)
 	if cycle == 1 && len(originalChoices) >= minResults {
@@ -1006,9 +1002,15 @@ retryUpdatedReport:
 			}
 
 			if checkIfReportHasAnyDataInIt(him.Client, rep, zerolog.Logger{}) {
-				lock.Lock()
-				choices = append(choices, rep)
-				lock.Unlock()
+				info := gaba.EstimateHallucinations(
+					him.Client, fmt.Sprintf("%s\n%s\n", a, b), rep)
+				him.Printf("Hallucations info: %v\n", info)
+
+				if info.DstTermsNew == 0 {
+					lock.Lock()
+					choices = append(choices, rep)
+					lock.Unlock()
+				}
 			}
 			wg.Done()
 		}(rep)

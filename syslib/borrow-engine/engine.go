@@ -2,7 +2,7 @@ package borrow_engine
 
 import (
 	"github.com/d0rc/agent-os/engines"
-	zlog "github.com/rs/zerolog/log"
+	"github.com/rs/zerolog"
 	"sync"
 	"time"
 )
@@ -31,6 +31,8 @@ type InferenceEngine struct {
 	TotalRequestsFailed uint64
 	settings            *InferenceEngineSettings
 	statsLock           sync.RWMutex
+
+	lg zerolog.Logger
 }
 
 func (ie *InferenceEngine) AccountProcessRequest(process string) {
@@ -45,7 +47,7 @@ type InferenceEngineSettings struct {
 	LogChan     chan string
 }
 
-func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *InferenceEngine {
+func NewInferenceEngine(lg zerolog.Logger, f ComputeFunction, settings *InferenceEngineSettings) *InferenceEngine {
 	return &InferenceEngine{
 		Nodes:                      []*InferenceNode{},
 		AddNodeChan:                make(chan *InferenceNode, 16384),
@@ -58,6 +60,7 @@ func NewInferenceEngine(f ComputeFunction, settings *InferenceEngineSettings) *I
 		ComputeFunction:            f,
 		settings:                   settings,
 		statsLock:                  sync.RWMutex{},
+		lg:                         lg,
 	}
 }
 
@@ -83,7 +86,7 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 	}
 	autodetectFinished := make(chan *InferenceNode, 1)
 	go func(node *InferenceNode) {
-		engines.StartInferenceEngine(newRemoteEngine, doneChannel)
+		engines.StartInferenceEngine(ie.lg, newRemoteEngine, doneChannel)
 		node.RemoteEngine = newRemoteEngine
 	}(node)
 
@@ -93,7 +96,7 @@ func (ie *InferenceEngine) AddNode(node *InferenceNode) chan *InferenceNode {
 			node.RemoteEngine.EmbeddingsFailed {
 			// engine failed to run completion and embeddings
 			// we can't use it
-			zlog.Info().Msgf("compute node failed to run completion and embeddings: %s",
+			ie.lg.Info().Msgf("compute node failed to run completion and embeddings: %s",
 				node.EndpointUrl)
 			autodetectFinished <- node
 		} else {

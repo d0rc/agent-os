@@ -1,7 +1,6 @@
 package agency
 
 import (
-	"fmt"
 	"github.com/d0rc/agent-os/cmds"
 	"sync/atomic"
 )
@@ -22,15 +21,8 @@ func (agentState *GeneralAgentInfo) jobsChannelManager() {
 					<-maxJobThreads
 					atomic.AddUint64(&agentState.jobsFinished, 1)
 				}()
-				resp, err := agentState.Server.RunRequest(job, JobsManagerInferenceTimeout, JobsManagerExecutionPool)
-				if err != nil {
-					fmt.Printf("error running request: %v\n", err)
-					go func(job *cmds.ClientRequest) {
-						agentState.jobsChannel <- job
-					}(job)
-				} else {
-					agentState.resultsChannel <- resp
-				}
+				resp := agentState.Server.RunRequest(job, JobsManagerInferenceTimeout, JobsManagerExecutionPool)
+				agentState.resultsChannel <- resp
 			}(job)
 		}
 	}

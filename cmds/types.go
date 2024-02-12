@@ -97,6 +97,7 @@ type SetCacheRecordResponse struct {
 }
 
 type ClientRequest struct {
+	Trx                   string                    `json:"trx"`
 	Tags                  []string                  `json:"tags"`
 	ProcessName           string                    `json:"process-name"`
 	Priority              borrow_engine.JobPriority `json:"priority"`
@@ -114,6 +115,7 @@ type ClientRequest struct {
 }
 
 type ServerResponse struct {
+	Trx                   string                    `json:"trx"`
 	GoogleSearchResponse  []*GoogleSearchResponse   `json:"google-search-response"`
 	GetPageResponse       []*GetPageResponse        `json:"get-page-response"`
 	GetCompletionResponse []*GetCompletionResponse  `json:"get-completion-response"`

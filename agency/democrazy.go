@@ -74,7 +74,7 @@ Respond in the JSON format:
 
 	minResults := VoterMinResults
 retryVoting:
-	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
+	serverResponse := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
 		Priority:    borrow_engine.PRIO_User,
 		GetCompletionRequests: tools.Replicate(
@@ -83,9 +83,6 @@ retryVoting:
 				MinResults: minResults,
 			}, minResults),
 	}, 120*time.Second, os_client.REP_Default)
-	if err != nil {
-		return 0, fmt.Errorf("error running voters inference request: %w", err)
-	}
 
 	if serverResponse.GetCompletionResponse == nil || len(serverResponse.GetCompletionResponse) == 0 {
 		return 0, fmt.Errorf("no completions returned")
