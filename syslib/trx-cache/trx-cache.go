@@ -17,6 +17,8 @@ type TrxCache struct {
 	expirationQueue []ttlPair
 }
 
+const expirationTimeout = 5 * time.Minute
+
 func NewTrxCache() *TrxCache {
 	return &TrxCache{
 		pendingResults:  make(map[string][]chan []byte),
@@ -55,7 +57,7 @@ func (t *TrxCache) GetValue(trx string, f func() []byte) []byte {
 
 		t.expirationQueue = append(t.expirationQueue, ttlPair{
 			trx:      trx,
-			deadLine: time.Now().Add(5 * time.Minute),
+			deadLine: time.Now().Add(expirationTimeout),
 		})
 
 		for len(t.expirationQueue) > 1 && time.Since(t.expirationQueue[0].deadLine) > 0 {

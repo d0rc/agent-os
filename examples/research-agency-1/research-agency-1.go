@@ -37,8 +37,8 @@ var startAgency = flag.Bool("start-agency", false, "start agency")
 var agentOSUrl = flag.String("agent-os-url", "http://127.0.0.1:9000", "agent-os endpoint")
 var config = flag.String("agency-config", "../work2/agency.yaml", "path to agency config")
 var himHeads = flag.Int("him-heads", 1, "number of HIM-heads")
-var primaryAgentThreads = flag.Int("primary-agent-threads", 120, "number of threads for primary agent")
-var primaryGrowthFactor = flag.Int("primary-growth-factor", 10, "number of ways for primary agent to try")
+var primaryAgentThreads = flag.Int("primary-agent-threads", 1, "number of threads for primary agent")
+var primaryGrowthFactor = flag.Int("primary-growth-factor", 1, "number of ways for primary agent to try")
 
 func main() {
 	ts := time.Now()
@@ -132,15 +132,15 @@ func main() {
 				defer func() {
 					<-maxThreads
 				}()
-				resultYes := checkIfReportHasPlaceholdersOrFillers(client, report, lg)
-				if resultYes == true {
-					return
-				}
+				//resultYes := checkIfReportHasPlaceholdersOrFillers(client, report, lg)
+				//if resultYes == true {
+				//	return
+				//}
 
-				resultYes = checkIfReportHasAnyDataInIt(client, report, lg)
-				if resultYes == false {
-					return
-				}
+				//resultYes = checkIfReportHasAnyDataInIt(client, report, lg)
+				//if resultYes == false {
+				//	return
+				//}
 
 				finalReportsStream <- report
 			}(report)

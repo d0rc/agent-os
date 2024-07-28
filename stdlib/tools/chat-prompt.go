@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bytes"
 	"github.com/d0rc/agent-os/engines"
 	"strings"
 )
@@ -104,4 +105,56 @@ func (p *ChatPrompt) String(style PromptStyle) string {
 	}
 
 	return finalPrompt.String()
+}
+
+func (p *ChatPrompt) GetMessages() []*engines.Message {
+	return p.messages
+}
+
+// MessagesToString serializes a slice of Message to a single string
+func MessagesToString(messages []*engines.Message) string {
+	var buffer bytes.Buffer
+	for _, m := range messages {
+		if m == nil {
+			continue
+		}
+		buffer.WriteString("<|im_start|>")
+		buffer.WriteString(string(m.Role))
+		buffer.WriteString("\n")
+		buffer.WriteString(m.Content)
+		buffer.WriteString("<|im_end|>")
+	}
+	return buffer.String()
+}
+
+// StringToMessages deserializes a string to a slice of Message
+func StringToMessages(data string) []*engines.Message {
+	var messages []*engines.Message
+	segments := strings.Split(data, "<|im_end|>")
+
+	for _, segment := range segments {
+		if len(segment) == 0 {
+			continue // Skip empty segments
+		}
+
+		startTagIndex := strings.Index(segment, "<|im_start|>")
+		if startTagIndex == -1 {
+			continue // Invalid segment format
+		}
+
+		// Extract the role and content from the segment
+		roleContent := strings.TrimSpace(segment[startTagIndex+len("<|im_start|>"):])
+		parts := strings.SplitN(roleContent, "\n", 2)
+		if len(parts) != 2 {
+			continue // Invalid segment format
+		}
+
+		role := parts[0]
+		content := parts[1]
+
+		// Create a new Message and append it to the list
+		message := &engines.Message{Role: engines.ChatRole(role), Content: content}
+		messages = append(messages, message)
+	}
+	return messages
 }

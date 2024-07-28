@@ -48,13 +48,14 @@ type GoogleSearchResponse struct {
 }
 
 type GetCompletionRequest struct {
-	Model       string   `json:"model-mask"` // * - any model
-	RawPrompt   string   `json:"raw-prompt"` //
-	Temperature float32  `json:"temperature"`
-	StopTokens  []string `json:"stop-tokens"`
-	MinResults  int      `json:"min-results"`
-	MaxResults  int      `json:"max-results"` // default = 100
-	BestOf      int      `json:"best-of"`
+	Model       string             `json:"model-mask"` // * - any model
+	RawPrompt   string             `json:"raw-prompt"` //
+	Temperature float32            `json:"temperature"`
+	StopTokens  []string           `json:"stop-tokens"`
+	MinResults  int                `json:"min-results"`
+	MaxResults  int                `json:"max-results"` // default = 100
+	BestOf      int                `json:"best-of"`
+	Messages    []*engines.Message `json:"messages"`
 }
 
 type GetEmbeddingsRequest struct {

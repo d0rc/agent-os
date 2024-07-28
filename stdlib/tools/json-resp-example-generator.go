@@ -20,11 +20,17 @@ func RenderJsonString(structure []MapKV, buffer *strings.Builder, depth int) str
 					buffer.WriteString(",\n")
 				}
 			} else {
-				buffer.WriteString(fmt.Sprintf("%s\"%s\": {\n", strings.Repeat("\t", depth), kv.Key))
+				buffer.WriteString(fmt.Sprintf("\n%s\"%s\": {\n", strings.Repeat("\t", depth), kv.Key))
 				RenderJsonString(kv.InnerMap, buffer, depth+1)
-				buffer.WriteString(fmt.Sprintf("%s},\n", strings.Repeat("\t", depth)))
+
+				if len(structure)-1 == idx {
+					buffer.WriteString(fmt.Sprintf("\n%s}\n", strings.Repeat("\t", depth)))
+				} else {
+					buffer.WriteString(fmt.Sprintf("\n%s},\n", strings.Repeat("\t", depth)))
+				}
 			}
 		}
+
 	}
 
 	return buffer.String()

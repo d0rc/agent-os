@@ -89,7 +89,7 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context, process 
 		borrow_engine.JT_Completion,
 		priority,
 		&engines.GenerationSettings{
-			Messages:        nil,
+			Messages:        convertTypes(cr.Messages),
 			AfterJoinPrefix: "",
 			RawPrompt:       cr.RawPrompt,
 			NoCache:         false,
@@ -119,4 +119,17 @@ func processGetCompletion(cr GetCompletionRequest, ctx *server.Context, process 
 	response.Choices = append(response.Choices, message.Content)
 
 	return response, nil
+}
+
+func convertTypes(messages []*engines.Message) []engines.Message {
+	result := make([]engines.Message, 0, len(messages))
+
+	for _, msg := range messages {
+		result = append(result, engines.Message{
+			Role:    msg.Role,
+			Content: msg.Content,
+		})
+	}
+
+	return result
 }

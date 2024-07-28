@@ -95,7 +95,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					argsData, okArgsData := v.(map[string]interface{})["args"].(map[string]interface{})
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
-							agentState.getServerCommand(
+							agentState.GetServerCommand(
 								string(responseTrajectoryId),
 								commandName,
 								argsData,
@@ -113,7 +113,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						argsData, okArgsData := cmd["args"].(map[string]interface{})
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
-								agentState.getServerCommand(
+								agentState.GetServerCommand(
 									string(responseTrajectoryId),
 									commandName,
 									argsData,
@@ -151,7 +151,7 @@ var notes = make(map[string][]string)
 var listAllNotesSubs = []func(string, string){}
 var sectionSubs = make(map[string][]func(string, string))
 
-func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
+func (agentState *GeneralAgentInfo) GetServerCommand(resultId string,
 	commandName string,
 	args map[string]interface{},
 	reactiveResultSink func(string, string)) []*cmds.ClientRequest {
