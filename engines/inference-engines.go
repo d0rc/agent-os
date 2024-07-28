@@ -1,6 +1,7 @@
 package engines
 
 import (
+	"github.com/rs/zerolog"
 	"strings"
 	"time"
 )
@@ -69,11 +70,11 @@ type RemoteInferenceEngine struct {
 	ModelsEndpoint        string
 }
 
-func StartInferenceEngine(engine *RemoteInferenceEngine, done chan struct{}) {
+func StartInferenceEngine(lg zerolog.Logger, engine *RemoteInferenceEngine, done chan struct{}) {
 	// we need to send a completion request to the engine
 	// detect the model, then send embeddings request to the engine and
 	// detect the model and dimensions
-	_, err := RunCompletionRequest(engine, []*JobQueueTask{
+	_, err := RunCompletionRequest(lg, engine, []*JobQueueTask{
 		{
 			Req: &GenerationSettings{RawPrompt: "### Instruction\nProvide an answer. 2 + 2 = ?\n### Assistant: ", MaxRetries: 1, Temperature: 0.1},
 		},

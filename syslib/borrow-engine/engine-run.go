@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const InternalQueuesSize = 8
+const InternalQueuesSize = 8192
 
 func (ie *InferenceEngine) Run() {
 	jobsBuffer := map[JobPriority][]*ComputeJob{
@@ -33,11 +33,22 @@ func (ie *InferenceEngine) Run() {
 	for i := 0; i < int(PRIO_Background)+1; i++ {
 		jobQueues[i] = make(chan *ComputeJob, InternalQueuesSize)
 	}
+
+	embeddingJobs := make([]chan *ComputeJob, PRIO_Background+1)
+	for i := 0; i < int(PRIO_Background)+1; i++ {
+		embeddingJobs[i] = make(chan *ComputeJob, InternalQueuesSize)
+	}
+
 	for {
 		select {
 		case jobs := <-ie.IncomingJobs:
 			for _, job := range jobs {
-				jobQueues[job.Priority] <- job
+				if job.JobType == JT_Completion {
+					jobQueues[job.Priority] <- job
+				}
+				if job.JobType == JT_Embeddings {
+					embeddingJobs[job.Priority] <- job
+				}
 			}
 		case node := <-ie.AddNodeChan:
 			node.LastIdleAt = time.Now()
@@ -45,7 +56,12 @@ func (ie *InferenceEngine) Run() {
 			nodeIdx := len(ie.Nodes) - 1
 			// since we have added a new node, let's start the feeders for it
 			for idx := 0; idx < node.MaxRequests; idx++ {
-				go ie.singleRequestWorker(node, jobQueues, nodeIdx)
+				if node.JobTypes[0] == JT_Completion {
+					go ie.singleRequestWorker(node, jobQueues, nodeIdx)
+				}
+				if node.JobTypes[0] == JT_Embeddings {
+					go ie.singleRequestWorker(node, embeddingJobs, nodeIdx)
+				}
 			}
 		}
 	}

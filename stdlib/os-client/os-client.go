@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/d0rc/agent-os/cmds"
+	"github.com/google/uuid"
 	"github.com/logrusorgru/aurora"
+	zlog "github.com/rs/zerolog/log"
 	"io"
 	"net/http"
 	"time"
@@ -20,43 +22,31 @@ func NewAgentOSClient(url string) *AgentOSClient {
 	tr := &http.Transport{
 		MaxIdleConns:          10,
 		IdleConnTimeout:       15 * time.Second,
-		ResponseHeaderTimeout: 3600 * time.Second,
+		ResponseHeaderTimeout: 60 * time.Second,
 		DisableKeepAlives:     false,
 	}
 	return &AgentOSClient{
 		Url: url,
 		client: http.Client{
-			Timeout:   3600 * time.Second,
+			Timeout:   60 * time.Second,
 			Transport: tr,
 		},
 	}
 }
 
 func (c *AgentOSClient) RunRequests(reqs []*cmds.ClientRequest, timeout time.Duration) ([]*cmds.ServerResponse, error) {
-	type enumeratedResponse struct {
-		Idx  int
-		Resp *cmds.ServerResponse
-	}
-	responses := make([]chan *enumeratedResponse, len(reqs))
+	responses := make([]chan *cmds.ServerResponse, len(reqs))
 	for idx, req := range reqs {
-		responses[idx] = make(chan *enumeratedResponse)
-		go func(req *cmds.ClientRequest, ch chan *enumeratedResponse, idx int) {
-			resp, err := c.RunRequest(req, timeout, REP_Default)
-			if err != nil {
-				fmt.Printf("error running request: %v\n", err)
-			}
-
-			ch <- &enumeratedResponse{
-				Idx:  idx,
-				Resp: resp,
-			}
-		}(req, responses[idx], idx)
+		responses[idx] = make(chan *cmds.ServerResponse)
+		go func(req *cmds.ClientRequest, ch chan *cmds.ServerResponse) {
+			resp := c.RunRequest(req, timeout, REP_Default)
+			ch <- resp
+		}(req, responses[idx])
 	}
 
-	finalResponses := make([]*cmds.ServerResponse, len(reqs))
+	finalResponses := make([]*cmds.ServerResponse, 0)
 	for _, ch := range responses {
-		resp := <-ch
-		finalResponses[resp.Idx] = resp.Resp
+		finalResponses = append(finalResponses, <-ch)
 	}
 
 	return finalResponses, nil
@@ -71,13 +61,13 @@ const (
 
 var maxParallelRequestsChannel = make(chan struct{}, 256)
 
-func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) (*cmds.ServerResponse, error) {
-	timeout = 600 * time.Second
+func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duration, executionPool RequestExecutionPool) *cmds.ServerResponse {
+	//timeout = 60 * time.Second
 	if req.SpecialCaseResponse != "" || isRequestEmpty(req) {
 		return &cmds.ServerResponse{
 			SpecialCaseResponse: req.SpecialCaseResponse,
 			CorrelationId:       req.CorrelationId,
-		}, nil
+		}
 	}
 
 	if executionPool == REP_Default {
@@ -86,16 +76,17 @@ func (c *AgentOSClient) RunRequest(req *cmds.ClientRequest, timeout time.Duratio
 			<-maxParallelRequestsChannel
 		}()
 	}
+	req.Trx = uuid.New().String()
 retry:
 
 	reqBytes, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("error marshaling request: %w", err)
+		zlog.Fatal().Msgf("error marshalling request: %v", err)
 	}
 
 	resp, err := c.client.Post(c.Url, "application/json", bytes.NewBuffer(reqBytes))
 	if err != nil {
-		fmt.Printf("%s running OS request, going to try: %v\n",
+		fmt.Printf("%s running OS request, going to re-try: %v\n",
 			aurora.BrightRed("error"),
 			aurora.BrightGreen(err))
 		time.Sleep(300 * time.Millisecond)
@@ -105,16 +96,24 @@ retry:
 	defer resp.Body.Close()
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response: %w", err)
+		fmt.Printf("%s read OS response, going to re-try: %v\n",
+			aurora.BrightRed("error"),
+			aurora.BrightGreen(err))
+		time.Sleep(300 * time.Millisecond)
+		goto retry
 	}
 
 	var serverResponse cmds.ServerResponse
 	err = json.Unmarshal(respBytes, &serverResponse)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling response: %w", err)
+		fmt.Printf("%s processing OS response, going to re-try: %v\n",
+			aurora.BrightRed("error"),
+			aurora.BrightGreen(err))
+		time.Sleep(300 * time.Millisecond)
+		goto retry
 	}
 
-	return &serverResponse, nil
+	return &serverResponse
 }
 
 func isRequestEmpty(req *cmds.ClientRequest) bool {

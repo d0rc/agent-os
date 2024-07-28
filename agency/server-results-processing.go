@@ -54,7 +54,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 						fmt.Printf("got nothing in server response at index %d\n", idx)
 						continue
 					}
-					for _, observation := range generateObservationFromServerResults(ioRequests[idx], commandResponse, 1024, agentState) {
+					for _, observation := range GenerateObservationFromServerResults(ioRequests[idx], commandResponse, 1024, agentState) {
 						messageId := engines.GenerateMessageId(observation)
 						//fmt.Printf("got observation: %v\n", observation)
 						correlationId := commandResponse.CorrelationId
@@ -76,7 +76,7 @@ func (agentState *GeneralAgentInfo) ioRequestsProcessing() {
 	}
 }
 
-func generateObservationFromServerResults(request *cmds.ClientRequest, response *cmds.ServerResponse, maxLength int, agentState *GeneralAgentInfo) []string {
+func GenerateObservationFromServerResults(request *cmds.ClientRequest, response *cmds.ServerResponse, maxLength int, agentState *GeneralAgentInfo) []string {
 	observations := make([]string, 0)
 	observation := ""
 	if request.SpecialCaseResponse != "" {

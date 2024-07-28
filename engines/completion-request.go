@@ -2,10 +2,11 @@ package engines
 
 import (
 	"fmt"
+	"github.com/rs/zerolog"
 	"net/http"
 )
 
-func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask) ([]*Message, error) {
+func RunCompletionRequest(lg zerolog.Logger, inferenceEngine *RemoteInferenceEngine, batch []*JobQueueTask) ([]*Message, error) {
 	if len(batch) == 0 {
 		return nil, nil
 	}
@@ -14,7 +15,7 @@ func RunCompletionRequest(inferenceEngine *RemoteInferenceEngine, batch []*JobQu
 	}
 
 	if inferenceEngine.Protocol == "http-openai" {
-		return openAICompatibleInference(inferenceEngine, batch, &client)
+		return openAICompatibleInference(lg, inferenceEngine, batch, &client)
 	}
 
 	if inferenceEngine.Protocol == "http-together" {

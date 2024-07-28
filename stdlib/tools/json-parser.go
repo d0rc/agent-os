@@ -9,6 +9,7 @@ func ParseJSON(sourceData string, parser func(string) error) error {
 	// starting with some symbol, it's JSON here, and it ends with some symbol
 	// first symbol of JSON can be: '"', "{", "["
 	sourceData = cleanJSONString(sourceData)
+	//sourceData = strings.ReplaceAll(sourceData, "\n", " ")
 	sourceData = strings.TrimSpace(strings.ReplaceAll(sourceData, "\\|", "|"))
 
 	if len(sourceData) == 1 {
@@ -18,17 +19,30 @@ func ParseJSON(sourceData string, parser func(string) error) error {
 	jsonStartingSymbols := []string{"{", "[", "\"", "1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "t", "f"}
 
 	var err error
+	minSuccessPosition := -1
+	//minSuccessSymbol := ""
 	for _, symbol := range jsonStartingSymbols {
-		if bracketIndex := strings.Index(sourceData, symbol); bracketIndex != -1 {
-			err = actualParse(strings.TrimSpace(sourceData[bracketIndex:]), parser)
-			if err == nil {
-				return nil
+		symbolPosition := strings.Index(sourceData, symbol)
+		if symbolPosition == -1 {
+			continue
+		}
+
+		err = actualParse(strings.TrimSpace(sourceData[symbolPosition:]), parser)
+		if err == nil {
+			if minSuccessPosition == -1 {
+				minSuccessPosition = symbolPosition
+				//minSuccessSymbol = symbol
+			} else {
+				if symbolPosition < minSuccessPosition {
+					minSuccessPosition = symbolPosition
+					//minSuccessSymbol = symbol
+				}
 			}
 		}
 	}
 
-	if err == nil {
-		return err
+	if minSuccessPosition != -1 {
+		return actualParse(strings.TrimSpace(sourceData[minSuccessPosition:]), parser)
 	}
 
 	return err

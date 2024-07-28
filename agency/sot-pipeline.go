@@ -10,7 +10,7 @@ import (
 func (agentState *GeneralAgentInfo) SoTPipeline(growthFactor, maxRequests, maxPendingRequests int) {
 	semanticSpace := message_store.NewSemanticSpace(growthFactor)
 	agentState.space = semanticSpace
-	systemMessage, err := agentState.getSystemMessage()
+	systemMessage, err := agentState.GetSystemMessage()
 	if err != nil {
 		return
 	}

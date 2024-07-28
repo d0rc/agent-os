@@ -2,6 +2,7 @@ package borrow_engine
 
 import (
 	"fmt"
+	"github.com/rs/zerolog"
 	"math/rand"
 	"testing"
 	"time"
@@ -9,7 +10,7 @@ import (
 
 func TestComputeRoutingWorksTest(t *testing.T) {
 	// create engine
-	engine := NewInferenceEngine(ComputeFunction{
+	engine := NewInferenceEngine(zerolog.Logger{}, ComputeFunction{
 		JT_Completion: func(node *InferenceNode, jobs []*ComputeJob) ([]*ComputeJob, error) {
 			//fmt.Printf("Running batch of %d jobs on node %s\n", len(jobs), node.EndpointUrl)
 			time.Sleep(time.Duration(1+rand.Intn(1000)) * time.Millisecond)

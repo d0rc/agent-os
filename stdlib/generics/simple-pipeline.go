@@ -18,17 +18,20 @@ import (
 type ResultProcessingOutcome int
 
 type SimplePipeline struct {
-	SystemMessage               string
-	Vars                        map[string]interface{}
-	Temperature                 float32
-	AssistantResponsePrefix     map[int]string
-	ResponseFields              []tools.MapKV
-	MinParsableResults          int
-	Client                      *os_client.AgentOSClient
-	ProcessName                 string
-	Tools                       []agent_tools.AgentTool
-	History                     []*engines.Message
-	FullParsedResponseProcessor func(map[string]interface{}, string) error
+	SystemMessage                    string
+	Vars                             map[string]interface{}
+	Temperature                      float32
+	AssistantResponsePrefix          map[int]string
+	ResponseFields                   []tools.MapKV
+	MinParsableResults               int
+	Client                           *os_client.AgentOSClient
+	ProcessName                      string
+	Tools                            []agent_tools.AgentTool
+	History                          []*engines.Message
+	FullParsedResponseProcessor      func(map[string]interface{}, string) error
+	FullParsedResponseSliceProcessor func(parsed []interface{}, full string) error
+	MaxParsableResults               int
+	RawResponseProcessor             func(string) error
 }
 
 func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimplePipeline {
@@ -40,9 +43,6 @@ func CreateSimplePipeline(client *os_client.AgentOSClient, name string) *SimpleP
 		Temperature:             0.1,
 		Client:                  client,
 		ProcessName:             name,
-		FullParsedResponseProcessor: func(m map[string]interface{}, s string) error {
-			return nil
-		},
 	}
 
 	result.Vars["name"] = name
@@ -57,6 +57,18 @@ func (p *SimplePipeline) WithSystemMessage(systemMessage string) *SimplePipeline
 
 func (p *SimplePipeline) WithResultsProcessor(processor func(map[string]interface{}, string) error) *SimplePipeline {
 	p.FullParsedResponseProcessor = processor
+	return p
+}
+
+func (p *SimplePipeline) WithSliceOfResultsProcessor(f func(parsed []interface{}, full string) error) *SimplePipeline {
+	p.FullParsedResponseSliceProcessor = f
+
+	return p
+}
+
+func (p *SimplePipeline) WithRawResultsProcessor(f func(string) error) *SimplePipeline {
+	p.RawResponseProcessor = f
+
 	return p
 }
 
@@ -87,6 +99,11 @@ func (p *SimplePipeline) WithResponseField(key string, value string) *SimplePipe
 
 func (p *SimplePipeline) WithMinParsableResults(minParsableResults int) *SimplePipeline {
 	p.MinParsableResults = minParsableResults
+	return p
+}
+
+func (p *SimplePipeline) WithMaxParsableResults(maxParsableResults int) *SimplePipeline {
+	p.MaxParsableResults = maxParsableResults
 	return p
 }
 
@@ -125,12 +142,15 @@ func (p *SimplePipeline) Run(executionPool os_client.RequestExecutionPool) error
 		for {
 			select {
 			case <-done:
+				fmt.Printf("\r\033[K\r")
 				return
 			case <-time.After(time.Second * 1):
-				fmt.Printf("\r\033[K\r[%s] %s is thinking, current cycle: %d\r",
+				fmt.Printf("\r\033[K\r[%s] %s is thinking, current cycle: %d [%d/%d]\r",
 					nextSymbol(),
 					aurora.BrightCyan(p.ProcessName),
-					cycle)
+					cycle,
+					okResults,
+					minResults)
 			}
 		}
 	}()
@@ -146,27 +166,22 @@ retry:
 	}
 	if cycle == 0 {
 		minResults = p.MinParsableResults
-	} else {
-		minResults = 8
 	}
 
-	chatPrompt := tools.NewChatPrompt().AddSystem(systemMessage)
+	chatPrompt := tools.NewChatPrompt().AddUser(systemMessage)
 	for _, msg := range p.History {
 		chatPrompt.AddMessage(msg)
 	}
 
-	response, err := p.Client.RunRequest(&cmds.ClientRequest{
+	response := p.Client.RunRequest(&cmds.ClientRequest{
 		ProcessName: p.ProcessName,
 		GetCompletionRequests: tools.Replicate(cmds.GetCompletionRequest{
 			RawPrompt:   chatPrompt.DefString(),
+			Messages:    chatPrompt.GetMessages(),
 			Temperature: p.Temperature,
 			MinResults:  minResults,
-		}, minResults),
+		}, min(64, minResults)),
 	}, 120*time.Second, executionPool)
-	if err != nil {
-		time.Sleep(100 * time.Millisecond)
-		goto retry
-	}
 
 	choices := tools.DropDuplicates(tools.FlattenChoices(response.GetCompletionResponse))
 	if len(choices) > minResults {
@@ -175,24 +190,50 @@ retry:
 
 	for _, choice := range choices {
 		if _, exists := parsedChoices[choice]; exists {
+			minResults++
 			continue
 		}
 		parsedChoices[choice] = struct{}{}
 
-		parsedResponse := make(map[string]interface{})
-		var parsedValue string
-		if err = tools.ParseJSON(choice, func(s string) error {
-			parsedValue = s
-			return json.Unmarshal([]byte(s), &parsedResponse)
-		}); err != nil {
-			continue
-		}
+		if p.FullParsedResponseProcessor != nil {
+			parsedResponse := make(map[string]interface{})
+			//var parsedValue string
+			if err = tools.ParseJSON(choice, func(s string) error {
+				//	parsedValue = s
+				return json.Unmarshal([]byte(s), &parsedResponse)
+			}); err != nil {
+				// ...
+			}
 
-		if err = p.FullParsedResponseProcessor(parsedResponse, parsedValue); err != nil {
-			// got error, processing response...!
-		} else {
-			okResults++
+			if err = p.FullParsedResponseProcessor(parsedResponse, choice); err != nil {
+				// got error, processing response...!
+			} else {
+				okResults++
+			}
+		} else if p.FullParsedResponseSliceProcessor != nil {
+			parsedResponse := make([]interface{}, 0)
+			//var parsedValue string
+			if err = tools.ParseJSON(choice, func(s string) error {
+				//	parsedValue = s
+				return json.Unmarshal([]byte(s), &parsedResponse)
+			}); err != nil {
+				// ...
+			}
+
+			if err = p.FullParsedResponseSliceProcessor(parsedResponse, choice); err != nil {
+				// got error, processing response...!
+			} else {
+				okResults++
+			}
+		} else if p.RawResponseProcessor != nil {
+			if p.RawResponseProcessor(choice) == nil {
+				okResults++
+			}
 		}
+	}
+
+	if okResults >= p.MaxParsableResults {
+		return nil
 	}
 
 	if okResults < p.MinParsableResults {
@@ -255,6 +296,23 @@ func (p *SimplePipeline) WithUserMessage(desc string) *SimplePipeline {
 	p.History = append(p.History, &engines.Message{
 		Role:    engines.ChatRoleUser,
 		Content: desc,
+	})
+
+	return p
+}
+
+func (p *SimplePipeline) ConditionalField(flag bool, f func(sp *SimplePipeline) *SimplePipeline) *SimplePipeline {
+	if flag {
+		return f(p)
+	}
+
+	return p
+}
+
+func (p *SimplePipeline) WithAssistantMessage(s string) *SimplePipeline {
+	p.History = append(p.History, &engines.Message{
+		Role:    engines.ChatRoleAssistant,
+		Content: s,
 	})
 
 	return p

@@ -21,7 +21,7 @@ func (cw ChannelWriter) Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-var OutputChannel = make(chan string, 4096)
+var OutputChannel = make(chan string, 128*1024)
 
 func ConsoleInit(name string, termUi *bool) (zerolog.Logger, chan string) {
 	if termUi == nil {

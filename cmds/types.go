@@ -48,13 +48,14 @@ type GoogleSearchResponse struct {
 }
 
 type GetCompletionRequest struct {
-	Model       string   `json:"model-mask"` // * - any model
-	RawPrompt   string   `json:"raw-prompt"` //
-	Temperature float32  `json:"temperature"`
-	StopTokens  []string `json:"stop-tokens"`
-	MinResults  int      `json:"min-results"`
-	MaxResults  int      `json:"max-results"` // default = 100
-	BestOf      int      `json:"best-of"`
+	Model       string             `json:"model-mask"` // * - any model
+	RawPrompt   string             `json:"raw-prompt"` //
+	Temperature float32            `json:"temperature"`
+	StopTokens  []string           `json:"stop-tokens"`
+	MinResults  int                `json:"min-results"`
+	MaxResults  int                `json:"max-results"` // default = 100
+	BestOf      int                `json:"best-of"`
+	Messages    []*engines.Message `json:"messages"`
 }
 
 type GetEmbeddingsRequest struct {
@@ -97,6 +98,7 @@ type SetCacheRecordResponse struct {
 }
 
 type ClientRequest struct {
+	Trx                   string                    `json:"trx"`
 	Tags                  []string                  `json:"tags"`
 	ProcessName           string                    `json:"process-name"`
 	Priority              borrow_engine.JobPriority `json:"priority"`
@@ -114,6 +116,7 @@ type ClientRequest struct {
 }
 
 type ServerResponse struct {
+	Trx                   string                    `json:"trx"`
 	GoogleSearchResponse  []*GoogleSearchResponse   `json:"google-search-response"`
 	GetPageResponse       []*GetPageResponse        `json:"get-page-response"`
 	GetCompletionResponse []*GetCompletionResponse  `json:"get-completion-response"`

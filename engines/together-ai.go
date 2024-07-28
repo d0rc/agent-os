@@ -7,6 +7,7 @@ import (
 	zlog "github.com/rs/zerolog/log"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -37,13 +38,14 @@ func togetherAIInference(inferenceEngine *RemoteInferenceEngine, batch []*JobQue
 	}
 	req := &togetherRequest{
 		// Model:       "mistralai/Mistral-7B-Instruct-v0.1",
-		Model:       "mistralai/Mixtral-8x7B-Instruct-v0.1",
-		Prompt:      batch[0].Req.RawPrompt,
-		Temperature: batch[0].Req.Temperature,
-		TopP:        0.9,
-		TopK:        50,
-		MaxTokens:   2048,
-		Stop:        stopTokens[0],
+		Model:             "Qwen/Qwen2-72B-Instruct",
+		Prompt:            batch[0].Req.RawPrompt,
+		Temperature:       batch[0].Req.Temperature,
+		TopP:              0.9,
+		TopK:              50,
+		MaxTokens:         16384,
+		RepetitionPenalty: 0.7,
+		Stop:              stopTokens[0],
 	}
 
 	reqJson, err := json.Marshal(req)
@@ -75,6 +77,27 @@ func togetherAIInference(inferenceEngine *RemoteInferenceEngine, batch []*JobQue
 	_ = resp.Body.Close()
 	if err != nil {
 		return nil, err
+	}
+
+	// help me God
+	if resp.StatusCode == 400 {
+		if strings.Contains(string(result), "max_new_tokens") {
+			// it is a context overflow error, it's an application level error
+			zlog.Error().Msgf("returning context overflow as system message")
+			results := make([]*Message, 1)
+			results[0] = &Message{
+				Role:    ChatRoleSystem,
+				Content: "context overflow",
+			}
+
+			if batch[0].Res != nil {
+				batch[0].Res <- results[0]
+			}
+
+			return results, nil
+		} else {
+			zlog.Error().Msgf("error code is 400, it could be context overflow error, be we're not certain: %s", result)
+		}
 	}
 
 	if resp.StatusCode != 200 {

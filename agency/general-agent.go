@@ -142,13 +142,25 @@ func (agentState *GeneralAgentInfo) Stop() {
 	agentState.quitHistoryAppender <- struct{}{}
 }
 
-func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error) {
+func (agentState *GeneralAgentInfo) GetSystemMessage() (*engines.Message, error) {
+	return agentState.GetSystemMessageWithVars(map[string]string{})
+}
+
+func (agentState *GeneralAgentInfo) GetSystemMessageWithVars(m map[string]string) (*engines.Message, error) {
 	tpl, err := pongo2.FromString(agentState.Settings.Agent.PromptBased.Prompt)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing agent's prompt: %v", err)
 	}
 
-	contextString, err := tpl.Execute(agentState.InputVariables)
+	tplContext := make(map[string]any)
+	for k, v := range agentState.InputVariables {
+		tplContext[k] = v
+	}
+	for k, v := range m {
+		tplContext[k] = v
+	}
+
+	contextString, err := tpl.Execute(tplContext)
 	if err != nil {
 		return nil, fmt.Errorf("error executing agent's prompt: %v", err)
 	}
@@ -164,6 +176,12 @@ func (agentState *GeneralAgentInfo) getSystemMessage() (*engines.Message, error)
 	}
 	agentState.systemWriterChannel <- systemMessage
 	return systemMessage, nil
+}
+
+func (agentState *GeneralAgentInfo) GetSystemGoal() string {
+	r := agentState.Settings.Agent.PromptBased.Vars["goal"].(string)
+
+	return r
 }
 
 func getChatSignature(chat []*engines.Message) string {

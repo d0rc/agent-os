@@ -11,11 +11,22 @@ import (
 	"net/url"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 )
+
+var valuesMap = map[int]uint64{}
+var valuesLock = sync.RWMutex{}
+var votingErrorCount = uint64(0)
+var commandsSkipped = uint64(0)
+var commandsApproved = uint64(0)
+
+var lastPrint = time.Now()
+var lastPrintLock = sync.RWMutex{}
 
 func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(results []*engines.Message) []*cmds.ClientRequest {
 	clientRequests := make([]*cmds.ClientRequest, 0)
-	for resIdx, res := range results {
+	for _, res := range results {
 		parsedResults, parsedString, reconstructedParsedJson, err := agentState.ParseResponse(res.Content)
 		if err != nil {
 			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
@@ -25,15 +36,18 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		// let's go to cross roads here, to see if we should dive deeper here
 		voteRating, err := agentState.VoteForAction(agentState.InputVariables[IV_GOAL].(string), reconstructedParsedJson)
 		if err != nil {
+			atomic.AddUint64(&votingErrorCount, 1)
 			fmt.Printf("Error voting for action: %v\n", err)
 			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
 		if voteRating < MinimalVotingRatingForCommand {
-			fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
+			atomic.AddUint64(&commandsSkipped, 1)
+			//fmt.Printf("Skipping message %d of %d with rating: %f\n", resIdx, len(results), voteRating)
 			agentState.space.CancelPendingRequest(message_store.TrajectoryID(keys(res.ReplyTo)[0]))
 			continue
 		}
+		atomic.AddUint64(&commandsApproved, 1)
 
 		// it's only "parsedString" substring of original model response is interpretable by the system
 		msgId := engines.GenerateMessageId(parsedString)
@@ -81,7 +95,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 					argsData, okArgsData := v.(map[string]interface{})["args"].(map[string]interface{})
 					if okCommandName && okArgsData {
 						clientRequests = append(clientRequests,
-							agentState.getServerCommand(
+							agentState.GetServerCommand(
 								string(responseTrajectoryId),
 								commandName,
 								argsData,
@@ -99,7 +113,7 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 						argsData, okArgsData := cmd["args"].(map[string]interface{})
 						if okCommandName && okArgsData {
 							clientRequests = append(clientRequests,
-								agentState.getServerCommand(
+								agentState.GetServerCommand(
 									string(responseTrajectoryId),
 									commandName,
 									argsData,
@@ -116,6 +130,19 @@ func (agentState *GeneralAgentInfo) TranslateToServerCallsAndRecordHistory(resul
 		}
 	}
 
+	lastPrintLock.RLock()
+	timeSince := time.Since(lastPrint)
+	lastPrintLock.RUnlock()
+	if timeSince > 1*time.Second {
+		lastPrintLock.Lock()
+		lastPrint = time.Now()
+		lastPrintLock.Unlock()
+		fmt.Printf("[voter-stats] commands approved: %d, skipped: %d, errors: %d\n",
+			aurora.BrightGreen(atomic.LoadUint64(&commandsApproved)),
+			aurora.BrightCyan(atomic.LoadUint64(&commandsSkipped)),
+			aurora.BrightRed(atomic.LoadUint64(&votingErrorCount)))
+	}
+
 	return clientRequests
 }
 
@@ -124,7 +151,7 @@ var notes = make(map[string][]string)
 var listAllNotesSubs = []func(string, string){}
 var sectionSubs = make(map[string][]func(string, string))
 
-func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
+func (agentState *GeneralAgentInfo) GetServerCommand(resultId string,
 	commandName string,
 	args map[string]interface{},
 	reactiveResultSink func(string, string)) []*cmds.ClientRequest {
@@ -275,33 +302,35 @@ func (agentState *GeneralAgentInfo) getServerCommand(resultId string,
 		if agentState.ForkCallback != nil {
 			roleNameInterface, exists := args["role-name"]
 			if exists {
-				roleName := roleNameInterface.(string)
-				taskDescriptionInterface := args["task-description"]
-				if taskDescriptionInterface != nil {
-					var taskDescription string
-					taskDescription, ok := taskDescriptionInterface.(string)
-					if ok {
-						fmt.Printf("Hiring agent: %s, to execute task: %s\n",
-							aurora.BrightWhite(roleName),
-							aurora.BrightYellow(taskDescription))
-						go func(roleName, taskDescription, resultId string) {
+				roleName, roleNameOk := roleNameInterface.(string)
+				if roleNameOk {
+					taskDescriptionInterface := args["task-description"]
+					if taskDescriptionInterface != nil {
+						var taskDescription string
+						taskDescription, ok := taskDescriptionInterface.(string)
+						if ok {
+							fmt.Printf("Hiring agent: %s, to execute task: %s\n",
+								aurora.BrightWhite(roleName),
+								aurora.BrightYellow(taskDescription))
+							go func(roleName, taskDescription, resultId string) {
 
-							for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
-								// we've got final report from our sub-agent
-								fmt.Printf("Got sub-agent's final report: %s\n", msg)
-								content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
-									roleName, msg)
-								contentMessageId := engines.GenerateMessageId(content)
-								tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
-									roleName, taskDescription, msg))
-								agentState.historyAppenderChannel <- &engines.Message{
-									ID:      &contentMessageId,
-									ReplyTo: map[string]struct{}{resultId: {}},
-									Role:    engines.ChatRoleUser,
-									Content: content,
+								for msg := range agentState.ForkCallback(args["role-name"].(string), args["task-description"].(string)) {
+									// we've got final report from our sub-agent
+									fmt.Printf("Got sub-agent's final report: %s\n", msg)
+									content := fmt.Sprintf("Final report from %s:\n```\n%s\n```",
+										roleName, msg)
+									contentMessageId := engines.GenerateMessageId(content)
+									tools.AppendFile("final-reports.log", fmt.Sprintf("Final report from %s:\nTask description: %s\nFinal report: %s\n\n\n",
+										roleName, taskDescription, msg))
+									agentState.historyAppenderChannel <- &engines.Message{
+										ID:      &contentMessageId,
+										ReplyTo: map[string]struct{}{resultId: {}},
+										Role:    engines.ChatRoleUser,
+										Content: content,
+									}
 								}
-							}
-						}(roleName, taskDescription, resultId)
+							}(roleName, taskDescription, resultId)
+						}
 					}
 				}
 			}

@@ -8,7 +8,6 @@ import (
 	"github.com/d0rc/agent-os/stdlib/os-client"
 	"github.com/d0rc/agent-os/stdlib/tools"
 	"github.com/d0rc/agent-os/syslib/borrow-engine"
-	"github.com/logrusorgru/aurora"
 	"github.com/tidwall/gjson"
 	"os"
 	"strconv"
@@ -75,7 +74,7 @@ Respond in the JSON format:
 
 	minResults := VoterMinResults
 retryVoting:
-	serverResponse, err := agentState.Server.RunRequest(&cmds.ClientRequest{
+	serverResponse := agentState.Server.RunRequest(&cmds.ClientRequest{
 		ProcessName: "action-voter",
 		Priority:    borrow_engine.PRIO_User,
 		GetCompletionRequests: tools.Replicate(
@@ -84,9 +83,6 @@ retryVoting:
 				MinResults: minResults,
 			}, minResults),
 	}, 120*time.Second, os_client.REP_Default)
-	if err != nil {
-		return 0, fmt.Errorf("error running voters inference request: %w", err)
-	}
 
 	if serverResponse.GetCompletionResponse == nil || len(serverResponse.GetCompletionResponse) == 0 {
 		return 0, fmt.Errorf("no completions returned")
@@ -134,9 +130,10 @@ retryVoting:
 			}
 
 			if rateValue == "" {
-				fmt.Printf("no rateValue parsed: ```\n%s\n```\n%s\n```\n",
-					aurora.Cyan(choice),
-					aurora.Yellow(voterPrompt))
+				//fmt.Printf("no rateValue parsed: ```\n%s\n```\n%s\n```\n",
+				//	aurora.Cyan(choice),
+				//	aurora.Yellow(voterPrompt))
+				minResults++
 				return fmt.Errorf("no rateValue parsed: ```\n%s\n```", choice)
 			} else {
 				reconstructedBytes, _ := json.Marshal(&votersResponse{

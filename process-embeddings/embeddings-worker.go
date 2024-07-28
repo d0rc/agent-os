@@ -171,6 +171,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 		}
 
 		ts := time.Now()
+		ctx.ComputeRouter.AccountProcessRequest(process)
 		response, err := cmds.ProcessGetEmbeddings(jobs, ctx, process, borrow_engine.PRIO_Background)
 		if err != nil {
 			lg.Error().Err(err).
@@ -178,8 +179,10 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 			time.Sleep(1 * time.Second)
 			continue
 		}
+		embeddingsTimeDelta := time.Since(ts)
 
 		// let's write embeddings into our vector storage
+		qdrntTs := time.Now()
 		vectorsSlice := make([]*vectors.Vector, 0, len(response.GetEmbeddingsResponse))
 		for _, embedding := range response.GetEmbeddingsResponse {
 			vectorsSlice = append(vectorsSlice, &vectors.Vector{
@@ -196,6 +199,7 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 			ctx.Log.Error().Err(err).
 				Msgf("error inserting vectors into collection %s", collection)
 		}
+		qdrantTimeDelta := time.Since(qdrntTs)
 
 		/*lg.Info().
 		Msgf("maxId = %d, got embeddings for %d records, in %v",
@@ -210,6 +214,12 @@ func processEmbeddings(vectorDb vectors.VectorDB, collection string, pointers *[
 				Str("collection", collection).
 				Msg("error setting embeddings queue pointer")
 		}
+
+		ctx.Log.Info().Msgf("[embeddings-worker] T:[%v](fg:green,mod:bold), N:[%d](fg:green,mod:bold); Compute:[%v](fg:green,mod:bold), Qdrant:[%v](fg:green,mod:bold)",
+			time.Since(ts),
+			len(vectorsSlice),
+			embeddingsTimeDelta,
+			qdrantTimeDelta)
 	}
 }
 
